@@ -9,11 +9,6 @@ importScripts('hls-core.js'); // defines self.HLS
 
 const DEFAULTS = { saveAs: false };
 const getSettings = () => chrome.storage.local.get(DEFAULTS);
-let extensionEnabled = true;
-chrome.storage.local.get({ enabled: true }).then((settings) => { extensionEnabled = settings.enabled !== false; });
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.enabled) extensionEnabled = changes.enabled.newValue !== false;
-});
 
 const isHttp = (u) => /^(https?|ftp):/i.test(u || '');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -353,7 +348,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
  * Messages from popup / content script / link picker
  * ------------------------------------------------------------------- */
 async function handle(msg, sender) {
-  if (!extensionEnabled && !['refreshMedia'].includes(msg.type)) return { ok: false, error: 'Extension is disabled.' };
   switch (msg.type) {
     case 'download': { // batch from link picker
       let ok = 0; const failed = [];

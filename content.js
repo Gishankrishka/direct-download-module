@@ -5,14 +5,7 @@
   window.__ddmLoaded = true;
 
   let host = null, btn = null, closeBtn = null, panel = null, toast = null;
-  let target = null, hideTimer = 0, toastTimer = 0, panelOpen = false, seq = 0, enabled = false;
-
-  chrome.storage.local.get({ enabled: true }).then((settings) => { enabled = settings.enabled !== false; });
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes.enabled) return;
-    enabled = changes.enabled.newValue !== false;
-    if (!enabled && host) { panelOpen = false; panel.hidden = true; hide(); }
-  });
+  let target = null, hideTimer = 0, toastTimer = 0, lastMove = 0, panelOpen = false, seq = 0;
 
   const h = (tag, props, ...kids) => {
     const el = document.createElement(tag);
@@ -74,7 +67,6 @@
 
   /* ---------- button ---------- */
   function show(video, r, idleMs = 3500) {
-    if (!enabled) return;
     attach();
     target = video;
     const left = Math.max(4, Math.min(r.right, innerWidth) - 112);

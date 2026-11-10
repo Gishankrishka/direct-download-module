@@ -1,16 +1,8 @@
 # Direct Download Module
 
-![Works on my machine](https://img.shields.io/badge/works%20on-my%20machine-success?style=flat-square)
-
 A Manifest V3 browser extension for direct downloads and HLS video saving. It
 uses the browser download engine and does not require IDM, a native helper, or a
 server.
-
-## Fun Fact
-
-The extension can turn hundreds of tiny HLS segments into one MP4 without
-leaving the browser. The browser does the downloading, the bundled WebAssembly
-engine does the remuxing, and the extension does the paperwork.
 
 ## Features
 
@@ -22,9 +14,6 @@ engine does the remuxing, and the extension does the paperwork.
 - MPEG-TS streams are remuxed to MP4 inside the extension with bundled WebAssembly.
 - Optional `Referer` and `Origin` handling for protected, non-DRM media.
 - YouTube page detection with a one-click browser-native download attempt.
-- Browser recording fallback for videos whose source URL cannot be downloaded.
-- Close controls for hiding the on-video download overlay.
-- Persistent popup toggle to disable and re-enable the extension.
 
 ## Install From Source
 
@@ -46,12 +35,10 @@ avoid duplicate buttons and conflicting background workers.
 Use the toolbar popup to paste a URL, inspect media detected on the active tab,
 or open the HLS downloader. On a playing video, use the blue **Download** button
 to select a detected file or HLS quality. The context menu provides direct and
-batch link downloads. The on-video overlay can be closed with its `X` button.
-Use **Enable extension** in the popup to temporarily disable or re-enable the
-overlay and download actions without removing the extension.
-On a YouTube page, the popup can attempt a browser-native download of detected
-media.
+batch link downloads. On a YouTube page, the popup can attempt a browser-native
+download of detected media.
 
+YouTube requires signed DASH URLs and frequently separates video and audio.
 YouTube often exposes separate signed video and audio streams. A normal browser
 extension cannot execute a native downloader or merge those streams, so those
 videos require an external downloader such as `yt-dlp`.
@@ -73,18 +60,6 @@ The following are not supported:
 
 These restrictions are imposed by the stream or browser security model and
 cannot be bypassed by a normal extension.
-
-## Recording Fallback
-
-When no usable media URL is detected, open the on-video menu and choose
-**Record current video**. The extension uses the browser's `MediaRecorder` API
-to capture the currently playing video and saves a `.webm` file. Recording
-starts from the current playback position and stops when the user selects
-**Stop recording and save**.
-
-Recording quality and audio depend on the browser and the site. Some protected
-players disable capture, and recordings are not guaranteed to match the
-original MP4 container or quality.
 
 ## Project Layout
 

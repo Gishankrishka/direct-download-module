@@ -40,11 +40,6 @@ async function init() {
   }
 
   const st = await chrome.storage.local.get({ saveAs: false });
-  $('#enabled').checked = st.enabled !== false;
-  $('#enabled').addEventListener('change', (e) => {
-    chrome.storage.local.set({ enabled: e.target.checked });
-    say(e.target.checked ? 'Extension enabled' : 'Extension disabled');
-  });
   $('#saveAs').checked = st.saveAs;
   $('#saveAs').addEventListener('change', (e) => chrome.storage.local.set({ saveAs: e.target.checked }));
 
