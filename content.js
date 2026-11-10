@@ -4,7 +4,7 @@
   if (window.__ddmLoaded) return;
   window.__ddmLoaded = true;
 
-  let host = null, btn = null, panel = null, toast = null;
+  let host = null, btn = null, closeBtn = null, panel = null, toast = null;
   let target = null, hideTimer = 0, toastTimer = 0, lastMove = 0, panelOpen = false, seq = 0;
 
   const h = (tag, props, ...kids) => {
@@ -23,6 +23,8 @@
       .b{position:fixed;font:600 13px/1 system-ui,sans-serif;color:#fff;background:#2563eb;border:0;border-radius:6px;
          padding:8px 12px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5)}
       .b:hover{background:#1d4ed8}
+      .c{position:fixed;color:#fff;background:#374151;border:0;border-radius:50%;width:20px;height:20px;padding:0;cursor:pointer;font:600 14px/20px system-ui,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+      .c:hover{background:#4b5563}
       .p{position:fixed;width:310px;max-height:340px;overflow:auto;color:#f3f4f6;background:rgba(17,24,39,.97);
          border:1px solid #374151;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.6);font-size:13px}
       .hd{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid #374151;font-weight:600}
@@ -37,12 +39,14 @@
          padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.4;box-shadow:0 2px 10px rgba(0,0,0,.5)}
       [hidden]{display:none!important}` }));
     btn = h('button', { className: 'b', type: 'button', textContent: '⬇ Download', hidden: true });
+    closeBtn = h('button', { className: 'c', type: 'button', textContent: 'X', title: 'Hide download button', hidden: true });
     panel = h('div', { className: 'p', hidden: true });
     toast = h('div', { className: 't', hidden: true });
-    root.append(btn, panel, toast);
+    root.append(btn, closeBtn, panel, toast);
 
     btn.addEventListener('mouseenter', () => clearTimeout(hideTimer));
     btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); panelOpen ? closePanel() : openPanel(); });
+    closeBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); panelOpen = false; panel.hidden = true; hide(); });
     panel.addEventListener('mouseenter', () => clearTimeout(hideTimer));
   }
 
@@ -69,7 +73,10 @@
     const top = Math.max(r.top, 0) + 10;
     btn.style.left = left + 'px';
     btn.style.top = top + 'px';
+    closeBtn.style.left = Math.max(4, Math.min(r.right, innerWidth) - 20) + 'px';
+    closeBtn.style.top = Math.max(r.top, 0) + 'px';
     btn.hidden = false;
+    closeBtn.hidden = false;
     if (panelOpen) placePanel();
     clearTimeout(hideTimer);
     hideTimer = setTimeout(hide, idleMs);
@@ -77,6 +84,7 @@
   function hide() {
     if (panelOpen || !btn) return;
     btn.hidden = true;
+    closeBtn.hidden = true;
     target = null;
   }
   function scheduleHide(ms = 700) { clearTimeout(hideTimer); hideTimer = setTimeout(hide, ms); }
