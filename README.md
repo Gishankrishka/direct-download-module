@@ -1,8 +1,16 @@
 # Direct Download Module
 
+![Works on my machine](https://img.shields.io/badge/works%20on-my%20machine-success?style=flat-square)
+
 A Manifest V3 browser extension for direct downloads and HLS video saving. It
 uses the browser download engine and does not require IDM, a native helper, or a
 server.
+
+## Fun Fact
+
+The extension can turn hundreds of tiny HLS segments into one MP4 without
+leaving the browser. The browser does the downloading, the bundled WebAssembly
+engine does the remuxing, and the extension does the paperwork.
 
 ## Features
 
