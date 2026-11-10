@@ -100,6 +100,44 @@
   const extOf = (url, mime) => { try { const m = /\.([a-z0-9]{2,4})$/i.exec(new URL(url).pathname); if (m) return m[1].toUpperCase(); } catch { /* ignore */ } return (mime || '').split('/').pop().toUpperCase(); };
   const isYouTube = (url) => { try { const host = new URL(url).hostname.toLowerCase(); return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be'; } catch { return false; } };
 
+  async function recordCurrentVideo(video, control) {
+    if (!video) return say('No video is available to record.', 5000);
+    if (video.__ddmRecorder) {
+      video.__ddmRecorder.stop();
+      return;
+    }
+    const capture = video.captureStream || video.mozCaptureStream;
+    if (!capture || typeof MediaRecorder === 'undefined') return say('This browser cannot record the current video.', 5000);
+    let stream;
+    try { stream = capture.call(video); } catch { return say('The site does not allow this video to be recorded.', 5000); }
+    const mimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    const mimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type));
+    if (!mimeType) return say('WebM recording is not supported by this browser.', 5000);
+    const chunks = [];
+    let recorder;
+    try { recorder = new MediaRecorder(stream, { mimeType }); } catch { return say('Could not start recording this video.', 5000); }
+    video.__ddmRecorder = recorder;
+    control.querySelector('.l').textContent = 'Stop recording and save';
+    recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+    recorder.onerror = () => { delete video.__ddmRecorder; control.querySelector('.l').textContent = 'Record current video'; say('Recording failed.', 5000); };
+    recorder.onstop = () => {
+      delete video.__ddmRecorder;
+      control.querySelector('.l').textContent = 'Record current video';
+      stream.getTracks().forEach((track) => track.stop());
+      if (!chunks.length) return say('No recording data was produced.', 5000);
+      const blob = new Blob(chunks, { type: mimeType });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      const name = (document.title || 'video').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'video';
+      link.download = name.replace(/[. ]+$/, '') + '.webm';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      say('Recording downloaded.', 5000);
+    };
+    recorder.start(1000);
+    say('Recording started. Click Stop recording and save when finished.', 5000);
+  }
+
   function closePanel() { panelOpen = false; panel.hidden = true; scheduleHide(1500); }
 
   async function openPanel() {
@@ -194,6 +232,12 @@
           say(r?.ok ? 'Download started ✔' : (r?.error || 'Download failed.'), 4000);
         }));
       }
+    }
+
+    if (target && (target.captureStream || target.mozCaptureStream)) {
+      count++;
+      const recordRow = row('Record current video', 'WebM', () => recordCurrentVideo(target, recordRow));
+      panel.append(h('div', { className: 'sec', textContent: 'Browser fallback' }), recordRow);
     }
 
     if (res.dash.length) {
