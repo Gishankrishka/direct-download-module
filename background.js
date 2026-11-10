@@ -9,7 +9,7 @@ importScripts('hls-core.js'); // defines self.HLS
 
 const DEFAULTS = { saveAs: false };
 const getSettings = () => chrome.storage.local.get(DEFAULTS);
-let extensionEnabled = false;
+let extensionEnabled = true;
 chrome.storage.local.get({ enabled: true }).then((settings) => { extensionEnabled = settings.enabled !== false; });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.enabled) extensionEnabled = changes.enabled.newValue !== false;
@@ -206,7 +206,6 @@ function setBadge(tabId, n) {
 }
 
 chrome.webRequest.onHeadersReceived.addListener((d) => {
-  if (!extensionEnabled) return;
   if (d.tabId < 0 || d.statusCode < 200 || d.statusCode >= 300) return;
   if (d.type === 'image' || d.type === 'stylesheet' || d.type === 'script' || d.type === 'font') return;
 
