@@ -14,6 +14,8 @@ server.
 - MPEG-TS streams are remuxed to MP4 inside the extension with bundled WebAssembly.
 - Optional `Referer` and `Origin` handling for protected, non-DRM media.
 - YouTube page detection with a one-click browser-native download attempt.
+- Browser recording fallback for videos whose source URL cannot be downloaded.
+- Close controls for hiding the on-video download overlay.
 
 ## Install From Source
 
@@ -35,10 +37,10 @@ avoid duplicate buttons and conflicting background workers.
 Use the toolbar popup to paste a URL, inspect media detected on the active tab,
 or open the HLS downloader. On a playing video, use the blue **Download** button
 to select a detected file or HLS quality. The context menu provides direct and
-batch link downloads. On a YouTube page, the popup can attempt a browser-native
-download of detected media.
+batch link downloads. The on-video overlay can be closed with its `X` button.
+On a YouTube page, the popup can attempt a browser-native download of detected
+media.
 
-YouTube requires signed DASH URLs and frequently separates video and audio.
 YouTube often exposes separate signed video and audio streams. A normal browser
 extension cannot execute a native downloader or merge those streams, so those
 videos require an external downloader such as `yt-dlp`.
@@ -60,6 +62,18 @@ The following are not supported:
 
 These restrictions are imposed by the stream or browser security model and
 cannot be bypassed by a normal extension.
+
+## Recording Fallback
+
+When no usable media URL is detected, open the on-video menu and choose
+**Record current video**. The extension uses the browser's `MediaRecorder` API
+to capture the currently playing video and saves a `.webm` file. Recording
+starts from the current playback position and stops when the user selects
+**Stop recording and save**.
+
+Recording quality and audio depend on the browser and the site. Some protected
+players disable capture, and recordings are not guaranteed to match the
+original MP4 container or quality.
 
 ## Project Layout
 
