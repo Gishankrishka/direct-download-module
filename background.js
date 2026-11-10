@@ -99,10 +99,26 @@ async function fetchPlaylistText(url, referrer) {
     try { await dnr.updateSessionRules({ addRules: [mk(h.concat({ header: 'origin', operation: 'set', value: new URL(referrer).origin }))] }); added = true; }
     catch { try { await dnr.updateSessionRules({ addRules: [mk(h)] }); added = true; } catch { /* ignore */ } }
   }
+  const candidates = [url];
   try {
-    const res = await fetch(url, { credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(10000) });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return { text: await res.text(), base: res.url || url };
+    const parsed = new URL(url);
+    for (const key of ['url', 'src', 'source', 'stream', 'target']) {
+      const value = parsed.searchParams.get(key);
+      if (value && isHttp(value) && !candidates.includes(value)) candidates.push(value);
+    }
+  } catch { /* use the original URL */ }
+  let lastError = null;
+  try {
+    for (const candidate of candidates) {
+      try {
+        const res = await fetch(candidate, { credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(10000) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        if (/^\s*#EXTM3U/.test(text)) return { text, base: res.url || candidate };
+        lastError = new Error('That URL did not return an HLS playlist');
+      } catch (e) { lastError = e; }
+    }
+    throw lastError || new Error('Playlist request failed');
   } finally {
     if (added) dnr.updateSessionRules({ removeRuleIds: [id] }).catch(() => {});
   }
