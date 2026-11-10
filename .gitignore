@@ -1,0 +1,16 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+.directory
+.vscode/
+
+# Temporary and generated media files
+*.ts
+*.mp4
+*.m4s
+*.part
+*.crdownload
+
+# Package-manager output, if used for local tooling
+node_modules/
+npm-debug.log*
