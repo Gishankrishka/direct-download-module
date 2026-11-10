@@ -83,6 +83,42 @@ async function smartDownload(url, referrer, title) {
 }
 
 /* ---------------------------------------------------------------------
+ * Context menus
+ * ------------------------------------------------------------------- */
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: 'ddm-link', title: 'Download directly', contexts: ['link', 'image', 'video', 'audio'] });
+    chrome.contextMenus.create({ id: 'ddm-page', title: 'Download this page directly', contexts: ['page', 'frame'] });
+    chrome.contextMenus.create({ id: 'ddm-selected', title: 'Download selected links', contexts: ['selection'] });
+    chrome.contextMenus.create({ id: 'ddm-all', title: 'Download all links on this page', contexts: ['page', 'frame'] });
+  });
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  try {
+    switch (info.menuItemId) {
+      case 'ddm-link':
+        await smartDownload(info.linkUrl || info.srcUrl, info.pageUrl, tab?.title);
+        break;
+      case 'ddm-page':
+        await startDownload(info.frameUrl && info.frameUrl !== 'about:blank' ? info.frameUrl : info.pageUrl);
+        break;
+      case 'ddm-selected':
+      case 'ddm-all':
+        // Will be implemented in next commit
+        break;
+    }
+  } catch (e) {
+    alertInTab(tab?.id, 'Direct Download Module: ' + (e.message || e));
+  }
+});
+
+function alertInTab(tabId, message) {
+  if (tabId == null) return;
+  chrome.scripting.executeScript({ target: { tabId }, func: (m) => alert(m), args: [message] }).catch(() => {});
+}
+
+/* ---------------------------------------------------------------------
  * Messages from popup / content script
  * ------------------------------------------------------------------- */
 async function handle(msg, sender) {
