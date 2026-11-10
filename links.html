@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Download links</title><link rel="stylesheet" href="ui.css"></head>
+<body><div class="page">
+  <h1 id="title">Links</h1>
+  <div class="muted" id="sub"></div>
+  <div class="bar">
+    <input id="q" type="search" placeholder="Filter by text or URL…">
+    <select id="cat">
+      <option value="all">All types</option><option value="video">Video</option><option value="audio">Audio</option>
+      <option value="archives">Archives</option><option value="docs">Documents</option>
+      <option value="images">Images</option><option value="programs">Programs</option>
+    </select>
+    <button id="selVis">Select visible</button><button id="selNone">Select none</button>
+    <button id="go" class="primary">Download selected</button>
+    <span id="status" class="muted"></span>
+  </div>
+  <table><tbody id="rows"></tbody></table>
+</div><script src="links.js"></script></body></html>

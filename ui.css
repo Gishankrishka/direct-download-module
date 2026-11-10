@@ -1,0 +1,24 @@
+:root{--bg:#fff;--fg:#111827;--muted:#6b7280;--line:#e5e7eb;--acc:#2563eb;--accfg:#fff;--card:#f9fafb;--bad:#b91c1c;--good:#15803d}
+@media (prefers-color-scheme:dark){:root{--bg:#111827;--fg:#f3f4f6;--muted:#9ca3af;--line:#374151;--card:#1f2937;--bad:#f87171;--good:#4ade80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 system-ui,sans-serif}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:6px;padding:6px 10px}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+input[type=text],input[type=search],input:not([type]),select{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+h1{font-size:15px;margin:0 0 10px}h2{font-size:13px;margin:14px 0 6px}
+.muted{color:var(--muted)}.ok{color:var(--good)}.err{color:var(--bad)}
+.popup{width:380px;padding:12px}
+.popup form,.popup .row{display:flex;gap:6px;margin-bottom:8px}.popup form input{flex:1}
+#media{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
+#media li{border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:6px;background:var(--card)}
+.nm{font-weight:600;word-break:break-all}.meta{color:var(--muted);font-size:12px;margin:2px 0 6px}.btns{display:flex;gap:6px;flex-wrap:wrap}
+#msg{margin-top:8px;min-height:1.2em}
+.page{padding:16px 24px;max-width:1200px;margin:0 auto}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:1}
+.bar input{min-width:260px;flex:1}
+table{width:100%;border-collapse:collapse}
+td{border-top:1px solid var(--line);padding:5px 6px;vertical-align:top;word-break:break-all}
+td.cb{width:28px}td.u{color:var(--muted);font-size:12px}
+.fld{display:block;margin:10px 0}.fld input,.fld select{display:block;width:100%;margin-top:4px}
+code{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
