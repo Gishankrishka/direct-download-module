@@ -24,6 +24,7 @@ engine does the remuxing, and the extension does the paperwork.
 - YouTube page detection with a one-click browser-native download attempt.
 - Browser recording fallback for videos whose source URL cannot be downloaded.
 - Close controls for hiding the on-video download overlay.
+- Persistent popup toggle to disable and re-enable the extension.
 
 ## Install From Source
 
@@ -46,6 +47,8 @@ Use the toolbar popup to paste a URL, inspect media detected on the active tab,
 or open the HLS downloader. On a playing video, use the blue **Download** button
 to select a detected file or HLS quality. The context menu provides direct and
 batch link downloads. The on-video overlay can be closed with its `X` button.
+Use **Enable extension** in the popup to temporarily disable or re-enable the
+overlay and download actions without removing the extension.
 On a YouTube page, the popup can attempt a browser-native download of detected
 media.
 
