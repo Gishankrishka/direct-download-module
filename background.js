@@ -83,6 +83,57 @@ async function smartDownload(url, referrer, title) {
 }
 
 /* ---------------------------------------------------------------------
+ * "Download all / selected links" - gather links, show a picker page
+ * ------------------------------------------------------------------- */
+function gatherLinks(selectedOnly) {
+  const out = [];
+  const sel = window.getSelection();
+  if (selectedOnly && (!sel || sel.isCollapsed)) return out;
+  const add = (url, text, kind) => { if (url) out.push({ url, text: (text || '').replace(/\s+/g, ' ').trim().slice(0, 160), kind }); };
+  for (const a of document.querySelectorAll('a[href]')) {
+    if (selectedOnly && !sel.containsNode(a, true)) continue;
+    add(a.href, a.textContent || a.title || a.getAttribute('aria-label'), 'link');
+  }
+  if (!selectedOnly) {
+    for (const el of document.querySelectorAll('img[src], video[src], audio[src], source[src], embed[src]')) {
+      add(el.src, el.alt || el.title, el.localName);
+    }
+  }
+  return out;
+}
+
+function alertInTab(tabId, message) {
+  if (tabId == null) return;
+  chrome.scripting.executeScript({ target: { tabId }, func: (m) => alert(m), args: [message] }).catch(() => {});
+}
+
+async function openLinkPicker(tab, selectedOnly) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tab.id, allFrames: true }, func: gatherLinks, args: [!!selectedOnly]
+  });
+  const seen = new Set();
+  const items = [];
+  for (const r of results) {
+    for (const it of r.result || []) {
+      if (!isHttp(it.url)) continue;
+      const k = stripHash(it.url);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      items.push(it);
+    }
+  }
+  if (!items.length) {
+    alertInTab(tab.id, selectedOnly
+      ? 'No links found in the selection.'
+      : 'Cannot find any links. If this page does have links, refresh it and try again.');
+    return;
+  }
+  const id = crypto.randomUUID();
+  await chrome.storage.session.set({ ['links:' + id]: { pageUrl: tab.url, title: tab.title, selectedOnly: !!selectedOnly, items } });
+  await chrome.tabs.create({ url: chrome.runtime.getURL('links.html?id=' + id), index: tab.index + 1 });
+}
+
+/* ---------------------------------------------------------------------
  * Context menus
  * ------------------------------------------------------------------- */
 chrome.runtime.onInstalled.addListener(() => {
@@ -103,29 +154,41 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       case 'ddm-page':
         await startDownload(info.frameUrl && info.frameUrl !== 'about:blank' ? info.frameUrl : info.pageUrl);
         break;
-      case 'ddm-selected':
-      case 'ddm-all':
-        // Will be implemented in next commit
-        break;
+      case 'ddm-selected': await openLinkPicker(tab, true); break;
+      case 'ddm-all': await openLinkPicker(tab, false); break;
     }
   } catch (e) {
     alertInTab(tab?.id, 'Direct Download Module: ' + (e.message || e));
   }
 });
 
-function alertInTab(tabId, message) {
-  if (tabId == null) return;
-  chrome.scripting.executeScript({ target: { tabId }, func: (m) => alert(m), args: [message] }).catch(() => {});
-}
-
 /* ---------------------------------------------------------------------
- * Messages from popup / content script
+ * Messages from popup / content script / link picker
  * ------------------------------------------------------------------- */
 async function handle(msg, sender) {
   switch (msg.type) {
+    case 'download': { // batch from link picker
+      let ok = 0; const failed = [];
+      for (const it of msg.items || []) {
+        try { await startDownload(it.url, { referrer: it.referrer, saveAs: false }); ok++; }
+        catch { failed.push(it.url); }
+        await sleep(100);
+      }
+      return { ok: failed.length === 0, started: ok, failed };
+    }
     case 'downloadUrl':
       await smartDownload(msg.url, msg.referrer || null, msg.title);
       return { ok: true };
+
+    case 'openHls':
+      await openHls(msg.url || '', msg.page || '', msg.title || '', !!msg.auto);
+      return { ok: true };
+
+    case 'pickLinks': {
+      const tab = await chrome.tabs.get(msg.tabId);
+      await openLinkPicker(tab, !!msg.selectedOnly);
+      return { ok: true };
+    }
   }
   return { ok: false, error: 'Unknown message' };
 }
