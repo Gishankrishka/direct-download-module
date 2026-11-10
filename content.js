@@ -7,12 +7,17 @@
   let host = null, btn = null, closeBtn = null, panel = null, toast = null;
   let target = null, hideTimer = 0, toastTimer = 0, panelOpen = false, seq = 0, enabled = false, dismissed = false;
 
+  try { dismissed = sessionStorage.getItem('__ddmOverlayDismissed') === '1'; } catch { /* use memory state */ }
+
   chrome.storage.local.get({ enabled: true }).then((settings) => { enabled = settings.enabled !== false; });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.enabled) return;
     enabled = changes.enabled.newValue !== false;
     if (!enabled && host) { dismissed = true; panelOpen = false; panel.hidden = true; hide(); }
-    if (enabled) dismissed = false;
+    if (enabled) {
+      dismissed = false;
+      try { sessionStorage.removeItem('__ddmOverlayDismissed'); } catch { /* ignore */ }
+    }
   });
 
   const h = (tag, props, ...kids) => {
@@ -54,7 +59,11 @@
 
     btn.addEventListener('mouseenter', () => clearTimeout(hideTimer));
     btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); panelOpen ? closePanel() : openPanel(); });
-    closeBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); dismissed = true; panelOpen = false; panel.hidden = true; hide(); });
+    closeBtn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation(); dismissed = true;
+      try { sessionStorage.setItem('__ddmOverlayDismissed', '1'); } catch { /* use memory state */ }
+      panelOpen = false; panel.hidden = true; hide();
+    });
     panel.addEventListener('mouseenter', () => clearTimeout(hideTimer));
   }
 
@@ -75,6 +84,7 @@
 
   /* ---------- button ---------- */
   function show(video, r, idleMs = 3500) {
+    try { if (sessionStorage.getItem('__ddmOverlayDismissed') === '1') dismissed = true; } catch { /* use memory state */ }
     if (!enabled || dismissed) return;
     attach();
     target = video;
