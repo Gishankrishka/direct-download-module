@@ -145,10 +145,14 @@ async function getOptions(sender, msg) {
   const list = tabId == null ? [] : await getMedia(tabId);
   const files = list.filter((e) => e.kind === 'file').map((e) => ({ url: e.url, mime: e.mime, size: e.size }));
   const dash = list.filter((e) => e.kind === 'stream' && !e.hls).slice(0, 2).map((e) => ({ url: e.url, cmd: ytdlpCmd(e.url, page) }));
-  const hlsEntries = list.filter((e) => e.kind === 'stream' && e.hls).slice(0, 6);
+  const hlsEntries = list.filter((e) => e.kind === 'stream' && e.hls)
+    .sort((a, b) => b.time - a.time)
+    .slice(0, MAX_PER_TAB);
   const expanded = await Promise.all(hlsEntries.map((e) => expandHls(e.url, page)));
-  const inMaster = new Set(expanded.filter((x) => x.master).flatMap((x) => x.variants.map((v) => v.url)));
-  const streams = expanded.filter((x) => x.master || !inMaster.has(x.url));
+  const usable = expanded.filter((x) => !x.error);
+  const candidates = usable.length ? usable : expanded;
+  const inMaster = new Set(candidates.filter((x) => x.master).flatMap((x) => x.variants.map((v) => v.url)));
+  const streams = candidates.filter((x) => x.master || !inMaster.has(x.url));
   return { ok: true, files, streams, dash, title: sender.tab?.title || '', page };
 }
 
