@@ -1,6 +1,8 @@
 'use strict';
 const $ = (s) => document.querySelector(s);
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+const isYouTube = (url) => { try { const host = new URL(url).hostname.toLowerCase(); return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be'; } catch { return false; } };
+const youtubeCommand = (url) => `yt-dlp --no-playlist --merge-output-format mp4 --newline ${shq(url)}`;
 const say = (t, bad) => { const el = $('#msg'); el.textContent = t; el.className = bad ? 'err' : 'ok'; };
 const send = (m) => chrome.runtime.sendMessage(m);
 
@@ -28,6 +30,11 @@ async function copy(text, what) {
 
 async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (isYouTube(tab.url)) {
+    $('#youtube').hidden = false;
+    $('#youtubeCommand').addEventListener('click', () => copy(youtubeCommand(tab.url), 'YouTube MP4 command'));
+  }
 
   const st = await chrome.storage.local.get({ saveAs: false });
   $('#saveAs').checked = st.saveAs;

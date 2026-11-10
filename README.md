@@ -13,6 +13,7 @@ server.
 - AES-128 HLS decryption, retries, byte-range segments, and packet cleanup.
 - MPEG-TS streams are remuxed to MP4 inside the extension with bundled WebAssembly.
 - Optional `Referer` and `Origin` handling for protected, non-DRM media.
+- YouTube page detection with a one-click `yt-dlp` MP4 command.
 
 ## Install From Source
 
@@ -34,7 +35,12 @@ avoid duplicate buttons and conflicting background workers.
 Use the toolbar popup to paste a URL, inspect media detected on the active tab,
 or open the HLS downloader. On a playing video, use the blue **Download** button
 to select a detected file or HLS quality. The context menu provides direct and
-batch link downloads.
+batch link downloads. On a YouTube page, the popup can copy a `yt-dlp` command
+that downloads and merges the best available video and audio into MP4.
+
+YouTube requires signed DASH URLs and frequently separates video and audio.
+The extension cannot execute a native downloader, so the command must be run in
+a terminal with `yt-dlp` installed.
 
 ## HLS Support
 
