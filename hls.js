@@ -3,6 +3,7 @@ const $ = (s) => document.querySelector(s);
 const P = new URLSearchParams(location.search);
 const RULE_ID = 2000000000 + Math.floor(Math.random() * 100000000); // outside the range background.js purges
 let parsed = null, aborter = null, running = false;
+let converter = null, converterLoading = null;
 
 const log = (t, cls) => { const el = $('#log'); el.textContent = t; el.className = cls || ''; };
 
@@ -51,6 +52,38 @@ async function fetchPlaylist(url) {
 const fmtTime = (s) => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + 'h ' : '') + m + 'm ' + (s % 60) + 's'; };
 const fmtMB = (n) => (n / 1048576).toFixed(1) + ' MB';
 const withoutExtension = (name) => name.replace(/\.(?:mp4|ts|m4s|mkv|webm)$/i, '');
+
+async function getConverter() {
+  if (!converterLoading) {
+    converterLoading = (async () => {
+      const instance = new FFmpegWASM.FFmpeg();
+      await instance.load({
+        coreURL: chrome.runtime.getURL('ffmpeg-core.js'),
+        wasmURL: chrome.runtime.getURL('ffmpeg-core.wasm')
+      });
+      converter = instance;
+      return instance;
+    })();
+  }
+  return converter || converterLoading;
+}
+
+async function remuxTs(blob) {
+  const ffmpeg = await getConverter();
+  await ffmpeg.writeFile('input.ts', new Uint8Array(await blob.arrayBuffer()));
+  try {
+    await ffmpeg.exec(['-i', 'input.ts', '-map', '0:v:0', '-map', '0:a?', '-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-movflags', '+faststart', 'output.mp4']);
+  } catch (firstError) {
+    await ffmpeg.deleteFile('output.mp4').catch(() => {});
+    try {
+      await ffmpeg.exec(['-i', 'input.ts', '-map', '0:v:0', '-map', '0:a?', '-c', 'copy', '-movflags', '+faststart', 'output.mp4']);
+    } catch { throw firstError; }
+  }
+  const output = await ffmpeg.readFile('output.mp4');
+  await ffmpeg.deleteFile('input.ts').catch(() => {});
+  await ffmpeg.deleteFile('output.mp4').catch(() => {});
+  return new Blob([output], { type: 'video/mp4' });
+}
 
 async function load() {
   const url = $('#url').value.trim();
@@ -119,16 +152,20 @@ async function start() {
     });
 
     const base = HLS.safeName(withoutExtension($('#name').value.trim()), 'video');
-    const blob = new Blob(res.parts, { type: media.map ? 'video/mp4' : 'video/mp2t' });
+    let blob = new Blob(res.parts, { type: media.map ? 'video/mp4' : 'video/mp2t' });
+    if (!media.map) {
+      log('Downloaded all segments. Converting to MP4');
+      blob = await remuxTs(blob);
+    }
     const burl = URL.createObjectURL(blob);
-    const id = await chrome.downloads.download({ url: burl, filename: base + (media.map ? '.mp4' : '.ts'), conflictAction: 'uniquify', saveAs: false });
+    const id = await chrome.downloads.download({ url: burl, filename: base + '.mp4', conflictAction: 'uniquify', saveAs: false });
     chrome.downloads.onChanged.addListener(function done(d) {
       if (d.id === id && d.state && (d.state.current === 'complete' || d.state.current === 'interrupted')) {
         chrome.downloads.onChanged.removeListener(done); URL.revokeObjectURL(burl);
       }
     });
     $('#bar').value = 100;
-    let msg = `Done ✔  Saved ${base}${media.map ? '.mp4' : '.ts'} (${fmtMB(blob.size)}) to your Downloads folder.`;
+    let msg = `Done ✔  Saved ${base}.mp4 (${fmtMB(blob.size)}) to your Downloads folder.`;
     if (res.failed.length) msg += `\nSkipped segments: ${res.failed.join(', ')}`;
     log(msg, 'ok');
   } catch (e) {
