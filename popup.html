@@ -1,0 +1,12 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Direct Download Module</title><link rel="stylesheet" href="ui.css"></head>
+<body class="popup">
+  <h1>Direct Download Module</h1>
+  <form id="urlForm"><input id="url" placeholder="Paste a URL to download…" autocomplete="off"><button class="primary">Download</button></form>
+  <div class="row"><button id="all">All links on page</button><button id="sel">Selected links</button><button id="hls">HLS downloader…</button></div>
+  <h2>Media detected on this tab <span id="count" class="muted"></span></h2>
+  <ul id="media"></ul>
+  <label><input type="checkbox" id="saveAs"> Ask where to save each file</label>
+  <div id="msg"></div>
+  <script src="popup.js"></script>
+</body></html>
