@@ -101,6 +101,15 @@
     panel.hidden = false;
     const my = ++seq;
     renderMsg('Looking for available qualities…');
+    const discovered = new Set();
+    for (const entry of performance.getEntriesByType('resource')) {
+      if (/\.(?:m3u8|mpd)(?:[?#]|$)/i.test(entry.name)) discovered.add(entry.name);
+    }
+    for (const video of document.querySelectorAll('video')) {
+      const source = video.currentSrc || video.src || '';
+      if (/^https?:/i.test(source)) discovered.add(source);
+    }
+    await Promise.all([...discovered].map((url) => chrome.runtime.sendMessage({ type: 'rememberMedia', url, pageUrl: location.href }).catch(() => null)));
     let res;
     try { res = await chrome.runtime.sendMessage({ type: 'getOptions', pageUrl: location.href }); }
     catch { res = null; }

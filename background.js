@@ -356,6 +356,23 @@ async function handle(msg, sender) {
       return { ok: true };
     }
 
+      case 'rememberMedia': {
+        if (!isHttp(msg.url)) return { ok: false };
+        const tabId = sender.tab?.id;
+        if (!Number.isInteger(tabId)) return { ok: false };
+        const key = 'media:' + tabId;
+        const list = (await chrome.storage.session.get(key))[key] || [];
+        const url = normaliseMediaUrl(msg.url);
+        if (!list.some((item) => item.url === url)) {
+          list.unshift({ url, kind: 'stream', hls: /\.m3u8(?:[?#]|$)/i.test(url), mime: '', size: 0,
+            page: msg.pageUrl || '', title: sender.tab?.title || '', time: Date.now() });
+          list.length = Math.min(list.length, MAX_PER_TAB);
+          await chrome.storage.session.set({ [key]: list });
+          setBadge(tabId, list.length);
+        }
+        return { ok: true };
+      }
+
     case 'getOptions':
       return getOptions(sender, msg);
 
