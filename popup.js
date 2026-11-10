@@ -2,7 +2,6 @@
 const $ = (s) => document.querySelector(s);
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 const isYouTube = (url) => { try { const host = new URL(url).hostname.toLowerCase(); return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be'; } catch { return false; } };
-const youtubeCommand = (url) => `yt-dlp --no-playlist --merge-output-format mp4 --newline ${shq(url)}`;
 const say = (t, bad) => { const el = $('#msg'); el.textContent = t; el.className = bad ? 'err' : 'ok'; };
 const send = (m) => chrome.runtime.sendMessage(m);
 
@@ -33,7 +32,11 @@ async function init() {
 
   if (isYouTube(tab.url)) {
     $('#youtube').hidden = false;
-    $('#youtubeCommand').addEventListener('click', () => copy(youtubeCommand(tab.url), 'YouTube MP4 command'));
+    $('#youtubeDownload').addEventListener('click', async () => {
+      const result = await send({ type: 'videoDownload', src: '', pageUrl: tab.url });
+      if (result?.ok) say('YouTube download started');
+      else say(result?.error || 'YouTube requires a native downloader to merge signed video and audio streams.', true);
+    });
   }
 
   const st = await chrome.storage.local.get({ saveAs: false });

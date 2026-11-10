@@ -91,7 +91,6 @@
   const fmtSize = (n) => { if (!n) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i = 0; while (n >= 1024 && i < 3) { n /= 1024; i++; } return n.toFixed(i > 1 ? 1 : 0) + ' ' + u[i]; };
   const extOf = (url, mime) => { try { const m = /\.([a-z0-9]{2,4})$/i.exec(new URL(url).pathname); if (m) return m[1].toUpperCase(); } catch { /* ignore */ } return (mime || '').split('/').pop().toUpperCase(); };
   const isYouTube = (url) => { try { const host = new URL(url).hostname.toLowerCase(); return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be'; } catch { return false; } };
-  const youtubeCommand = (url) => `yt-dlp --no-playlist --merge-output-format mp4 --newline '${url.replace(/'/g, `'\\''`)}'`;
 
   function closePanel() { panelOpen = false; panel.hidden = true; scheduleHide(1500); }
 
@@ -205,9 +204,9 @@
     if (isYouTube(location.href)) {
       count++;
       panel.append(h('div', { className: 'sec', textContent: 'YouTube' }),
-        row('Copy YouTube MP4 command', 'yt-dlp', async () => {
-          try { await navigator.clipboard.writeText(youtubeCommand(location.href)); say('YouTube MP4 command copied.', 5000); }
-          catch { say('Could not copy the YouTube command.', 5000); }
+        row('Download YouTube video', 'MP4', async () => {
+          const result = await chrome.runtime.sendMessage({ type: 'videoDownload', src: '', pageUrl: location.href }).catch(() => null);
+          say(result?.ok ? 'YouTube download started.' : (result?.error || 'YouTube requires a native downloader to merge signed video and audio streams.'), 5000);
         }));
     }
 
