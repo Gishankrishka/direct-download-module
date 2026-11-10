@@ -1,4 +1,5 @@
 'use strict';
+importScripts('hls-core.js'); // defines self.HLS
 
 /* =====================================================================
  * Direct Download Module - service worker
@@ -81,6 +82,167 @@ async function smartDownload(url, referrer, title) {
   if (M3U8.test(path)) { await openHls(url, referrer, title); return; }
   await startDownload(url, { referrer });
 }
+
+/* ---------------------------------------------------------------------
+ * Reading HLS playlists ahead of time so the on-video menu can list qualities.
+ * ------------------------------------------------------------------- */
+const expandCache = new Map();
+
+async function fetchPlaylistText(url, referrer) {
+  const id = 2100000000 + Math.floor(Math.random() * 40000000); // never purged by purgeOldRules
+  const dnr = chrome.declarativeNetRequest;
+  const mk = (h) => ({ id, priority: 1, action: { type: 'modifyHeaders', requestHeaders: h },
+    condition: { initiatorDomains: [chrome.runtime.id], resourceTypes: ['xmlhttprequest'] } });
+  let added = false;
+  if (referrer && isHttp(referrer)) {
+    const h = [{ header: 'referer', operation: 'set', value: referrer }];
+    try { await dnr.updateSessionRules({ addRules: [mk(h.concat({ header: 'origin', operation: 'set', value: new URL(referrer).origin }))] }); added = true; }
+    catch { try { await dnr.updateSessionRules({ addRules: [mk(h)] }); added = true; } catch { /* ignore */ } }
+  }
+  try {
+    const res = await fetch(url, { credentials: 'include', cache: 'no-store', signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return { text: await res.text(), base: res.url || url };
+  } finally {
+    if (added) dnr.updateSessionRules({ removeRuleIds: [id] }).catch(() => {});
+  }
+}
+
+async function expandHls(url, page) {
+  const hit = expandCache.get(url);
+  if (hit && Date.now() - hit.t < 5 * 60 * 1000) return hit.data;
+  let data;
+  try {
+    const { text, base } = await fetchPlaylistText(url, page);
+    if (!/^\s*#EXTM3U/.test(text)) throw new Error('not an HLS playlist');
+    if (HLS.isMaster(text)) {
+      const m = HLS.parseMaster(text, base);
+      data = {
+        url, master: true,
+        variants: m.variants.map((v) => {
+          const h = parseInt(/x(\d+)/.exec(v.resolution)?.[1] || '0', 10);
+          return {
+            url: v.url, bandwidth: v.bandwidth, height: h,
+            label: (h ? h + 'p' : 'Stream') + (v.bandwidth ? ' · ' + Math.round(v.bandwidth / 1000) + ' kbps' : ''),
+            videoOnly: !!v.audioGroup && m.audio.some((a) => a.group === v.audioGroup)
+          };
+        })
+      };
+    } else {
+      const med = HLS.parseMedia(text, base);
+      data = { url, master: false, variants: [{ url, label: 'Original quality', duration: med.duration, live: !med.ended }] };
+    }
+  } catch (e) {
+    data = { url, master: false, error: String(e?.message || e), variants: [] };
+  }
+  expandCache.set(url, { t: Date.now(), data });
+  return data;
+}
+
+async function getOptions(sender, msg) {
+  const tabId = sender.tab?.id;
+  const page = msg.pageUrl || sender.tab?.url || '';
+  const list = tabId == null ? [] : await getMedia(tabId);
+  const files = list.filter((e) => e.kind === 'file').map((e) => ({ url: e.url, mime: e.mime, size: e.size }));
+  const dash = list.filter((e) => e.kind === 'stream' && !e.hls).slice(0, 2).map((e) => ({ url: e.url, cmd: ytdlpCmd(e.url, page) }));
+  const hlsEntries = list.filter((e) => e.kind === 'stream' && e.hls).slice(0, 6);
+  const expanded = await Promise.all(hlsEntries.map((e) => expandHls(e.url, page)));
+  const inMaster = new Set(expanded.filter((x) => x.master).flatMap((x) => x.variants.map((v) => v.url)));
+  const streams = expanded.filter((x) => x.master || !inMaster.has(x.url));
+  return { ok: true, files, streams, dash, title: sender.tab?.title || '', page };
+}
+
+/* ---------------------------------------------------------------------
+ * Media sniffing (what IDM's "Download this video" panel is based on)
+ * ------------------------------------------------------------------- */
+const MEDIA_EXT = /\.(mp4|m4v|m4a|webm|mkv|mov|avi|flv|wmv|mp3|aac|ogg|oga|ogv|opus|wav|flac|3gp)$/i;
+const STREAM_EXT = /\.(m3u8|mpd)$/i;
+const SEGMENT_EXT = /\.(ts|m4s|cmfv|cmfa|vtt|webvtt)$/i;
+const MIN_FILE_SIZE = 100 * 1024;
+const MAX_PER_TAB = 40;
+
+const header = (hs, name) => (hs || []).find((h) => h.name.toLowerCase() === name)?.value || '';
+
+function normaliseMediaUrl(u) {
+  try {
+    const x = new URL(u);
+    for (const p of ['range', 'rn', 'rbuf', 'bytestart', 'byteend']) x.searchParams.delete(p);
+    x.hash = '';
+    return x.href;
+  } catch { return u; }
+}
+
+let mediaQueue = Promise.resolve();
+const queueMedia = (fn) => (mediaQueue = mediaQueue.then(fn).catch(() => {}));
+
+function setBadge(tabId, n) {
+  chrome.action.setBadgeBackgroundColor({ tabId, color: '#2563eb' }).catch(() => {});
+  chrome.action.setBadgeText({ tabId, text: n ? String(n) : '' }).catch(() => {});
+}
+
+chrome.webRequest.onHeadersReceived.addListener((d) => {
+  if (d.tabId < 0 || d.statusCode < 200 || d.statusCode >= 300) return;
+  if (d.type === 'image' || d.type === 'stylesheet' || d.type === 'script' || d.type === 'font') return;
+
+  let path;
+  try { path = new URL(d.url).pathname; } catch { return; }
+  if (SEGMENT_EXT.test(path)) return;
+
+  const mime = header(d.responseHeaders, 'content-type').split(';')[0].trim().toLowerCase();
+  if (mime === 'video/mp2t') return;
+
+  let kind = null;
+  if (/mpegurl|dash\+xml/.test(mime) || STREAM_EXT.test(path)
+      || (M3U8.test(d.url) && /^(xmlhttprequest|other|media)$/.test(d.type))) kind = 'stream';
+  else if (/^(video|audio)\//.test(mime)) kind = 'file';
+  else if (/octet-stream/.test(mime) && MEDIA_EXT.test(path)) kind = 'file';
+  if (!kind) return;
+
+  const total = /\/(\d+)\s*$/.exec(header(d.responseHeaders, 'content-range'))?.[1];
+  const size = parseInt(total || header(d.responseHeaders, 'content-length'), 10) || 0;
+  if (kind === 'file' && size && size < MIN_FILE_SIZE) return;
+
+  const url = normaliseMediaUrl(d.url);
+  const tabId = d.tabId;
+  const hls = kind === 'stream' && (/mpegurl/.test(mime) || M3U8.test(d.url));
+
+  queueMedia(async () => {
+    const key = 'media:' + tabId;
+    const list = (await chrome.storage.session.get(key))[key] || [];
+    const existing = list.find((e) => e.url === url);
+    if (existing) {
+      if (size > existing.size) { existing.size = size; await chrome.storage.session.set({ [key]: list }); }
+      return;
+    }
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    list.unshift({ url, kind, hls, mime, size, page: tab?.url || '', title: tab?.title || '', time: Date.now() });
+    list.length = Math.min(list.length, MAX_PER_TAB);
+    await chrome.storage.session.set({ [key]: list });
+    setBadge(tabId, list.length);
+  });
+}, { urls: ['<all_urls>'] }, ['responseHeaders']);
+
+chrome.webNavigation.onCommitted.addListener((d) => {
+  if (d.frameId !== 0 || d.transitionType === 'auto_subframe') return;
+  queueMedia(() => chrome.storage.session.remove('media:' + d.tabId));
+  setBadge(d.tabId, 0);
+});
+chrome.tabs.onRemoved.addListener((tabId) => queueMedia(() => chrome.storage.session.remove('media:' + tabId)));
+
+async function getMedia(tabId) {
+  const key = 'media:' + tabId;
+  return (await chrome.storage.session.get(key))[key] || [];
+}
+
+async function pickMedia(tabId) {
+  const list = await getMedia(tabId);
+  const files = list.filter((e) => e.kind === 'file');
+  const video = files.filter((e) => /^video\//.test(e.mime) || /\.(mp4|m4v|webm|mkv|mov|avi|flv|wmv|3gp)(\?|$)/i.test(e.url));
+  const best = (arr) => arr.slice().sort((a, b) => b.size - a.size)[0];
+  return { file: best(video) || best(files) || null, stream: list.find((e) => e.kind === 'stream') || null };
+}
+
+const ytdlpCmd = (url, page) => `yt-dlp ${page ? '--referer ' + shq(page) + ' ' : ''}${shq(url)}`;
 
 /* ---------------------------------------------------------------------
  * "Download all / selected links" - gather links, show a picker page
@@ -184,10 +346,37 @@ async function handle(msg, sender) {
       await openHls(msg.url || '', msg.page || '', msg.title || '', !!msg.auto);
       return { ok: true };
 
+    case 'refreshMedia': {
+      const tabId = Number.isInteger(msg.tabId) ? msg.tabId : sender.tab?.id;
+      if (Number.isInteger(tabId)) {
+        expandCache.clear();
+        await chrome.storage.session.remove('media:' + tabId);
+        setBadge(tabId, 0);
+      }
+      return { ok: true };
+    }
+
+    case 'getOptions':
+      return getOptions(sender, msg);
+
     case 'pickLinks': {
       const tab = await chrome.tabs.get(msg.tabId);
       await openLinkPicker(tab, !!msg.selectedOnly);
       return { ok: true };
+    }
+    case 'videoDownload': {
+      const tabId = sender.tab?.id;
+      const page = msg.pageUrl || sender.tab?.url || null;
+      const src = msg.src || '';
+      let direct = false;
+      try { direct = isHttp(src) && !STREAM_EXT.test(new URL(src).pathname); } catch { /* ignore */ }
+      if (direct) { await startDownload(src, { referrer: page }); return { ok: true }; }
+      if (isHttp(src) && M3U8.test(src)) { await openHls(src, page, sender.tab?.title); return { ok: true, hls: true }; }
+      const pick = await pickMedia(tabId);
+      if (pick.file) { await startDownload(pick.file.url, { referrer: page }); return { ok: true }; }
+      if (pick.stream?.hls) { await openHls(pick.stream.url, page, sender.tab?.title); return { ok: true, hls: true }; }
+      if (pick.stream) return { ok: false, stream: true, cmd: ytdlpCmd(pick.stream.url, page) };
+      return { ok: false, error: 'No downloadable media detected yet. Press play for a moment, then try again.' };
     }
   }
   return { ok: false, error: 'Unknown message' };
