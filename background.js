@@ -88,7 +88,7 @@ function openHls(url, page, title, auto) {
   const q = new URLSearchParams({ u: url, r: page || '', n: title || '' });
   if (auto) q.set('auto', '1');
   return chrome.windows.create({
-    url: chrome.runtime.getURL('hls.html?' + q), type: 'popup', width: 537, height: 270, focused: true
+    url: chrome.runtime.getURL('hls.html?' + q), type: 'popup', width: 537, height: 350, focused: true
   });
 }
 /* Plain files go to the browser's download engine; HLS playlists go to the stream downloader. */
