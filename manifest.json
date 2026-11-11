@@ -19,7 +19,7 @@
   ],
   "permissions": [
     "downloads", "contextMenus", "webRequest", "webNavigation", "windows",
-    "declarativeNetRequest", "storage", "tabs", "scripting", "clipboardWrite", "offscreen"
+    "declarativeNetRequest", "storage", "tabs", "scripting", "clipboardWrite"
   ],
   "host_permissions": ["<all_urls>"]
 }

@@ -1,29 +1,27 @@
 'use strict';
 const $ = (s) => document.querySelector(s);
 const P = new URLSearchParams(location.search);
-const RULE_ID = 2000000000 + Math.floor(Math.random() * 100000000); // outside the range background.js purges
+const RULE_ID = 2000000000 + Math.floor(Math.random() * 100000000);
 let parsed = null, aborter = null, running = false;
 let converter = null, converterLoading = null;
 const jobId = crypto.randomUUID();
 const jobKey = 'hls-job:' + jobId;
 
-const log = (t, cls) => { const el = $('#log'); el.textContent = t; el.className = cls || ''; };
-const updateJob = (data) => chrome.storage.session.set({ [jobKey]: { id: jobId, name: $('#name').value || 'HLS video', time: Date.now(), ...data } }).catch(() => {});
+const log = (t, cls) => { const el = $('#status'); el.textContent = t; el.className = cls || ''; };
+const setDetail = (t) => { $('#detail').textContent = t; };
+const updateJob = (data) => chrome.storage.session.set({ [jobKey]: { id: jobId, name: $('#fileName').textContent || 'HLS video', time: Date.now(), ...data } }).catch(() => {});
 
 /* The fetches below come from this extension page, so give them the same Referer/Origin
    the real player would send. */
 async function setReferer() {
-  const page = $('#referer').value.trim();
-  const headers = [];
-  if (/^https?:/i.test(page)) {
-    headers.push({ header: 'referer', operation: 'set', value: page });
-    try { headers.push({ header: 'origin', operation: 'set', value: new URL(page).origin }); } catch { /* ignore */ }
-  }
+  const page = P.get('r') || '';
+  if (!/^https?:/i.test(page)) return;
+  const headers = [{ header: 'referer', operation: 'set', value: page }];
+  try { headers.push({ header: 'origin', operation: 'set', value: new URL(page).origin }); } catch { /* ignore */ }
   const dnr = chrome.declarativeNetRequest;
   const make = (h) => ({ id: RULE_ID, priority: 2, action: { type: 'modifyHeaders', requestHeaders: h },
     condition: { initiatorDomains: [chrome.runtime.id], resourceTypes: ['xmlhttprequest'] } });
   await dnr.updateSessionRules({ removeRuleIds: [RULE_ID] });
-  if (!headers.length) return;
   try { await dnr.updateSessionRules({ addRules: [make(headers)] }); }
   catch { await dnr.updateSessionRules({ addRules: [make(headers.slice(0, 1))] }); }
 }
@@ -55,6 +53,7 @@ async function fetchPlaylist(url) {
 const fmtTime = (s) => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + 'h ' : '') + m + 'm ' + (s % 60) + 's'; };
 const fmtMB = (n) => (n / 1048576).toFixed(1) + ' MB';
 const withoutExtension = (name) => name.replace(/\.(?:mp4|ts|m4s|mkv|webm)$/i, '');
+const safeName = (s, fallback) => (s || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120).replace(/[. ]+$/, '') || fallback || 'video';
 
 async function getConverter() {
   if (!converterLoading) {
@@ -88,124 +87,82 @@ async function remuxTs(blob) {
   return new Blob([output], { type: 'video/mp4' });
 }
 
-async function load() {
-  const url = $('#url').value.trim();
-  if (!/^https?:\/\//i.test(url)) return log('Enter a valid http(s) playlist URL.', 'err');
-  $('#load').disabled = true; $('#opts').hidden = true; log('Loading playlist…');
+async function loadAndStart() {
+  const url = P.get('u') || '';
+  if (!/^https?:\/\//i.test(url)) return log('Invalid URL', 'err');
+
+  const title = P.get('n') || '';
+  const baseName = safeName(title.replace(/^Watching\s+/i, ''), 'video');
+  $('#fileName').textContent = baseName;
+
+  await setReferer();
+  log('Loading playlist…');
+
   try {
-    await setReferer();
     const { text, base } = await fetchPlaylist(url);
+    let media;
     if (HLS.isMaster(text)) {
       const m = HLS.parseMaster(text, base);
       if (!m.variants.length) throw new Error('Playlist has no playable variants.');
-      parsed = { master: m };
-      const sel = $('#quality'); sel.textContent = '';
-      m.variants.forEach((v, i) => {
-        const o = document.createElement('option');
-        o.value = i; o.textContent = [v.resolution, Math.round(v.bandwidth / 1000) + ' kbps'].filter(Boolean).join(' · ');
-        sel.append(o);
-      });
-      $('#quality').parentElement.hidden = false;
-      $('#info').textContent = m.variants.length + ' quality option(s)';
-      if (m.audio.length) log('Note: this stream keeps audio in a separate track; only the video track is downloaded here. If the result has no sound, use the yt-dlp command from the extension popup instead.', 'muted');
-      else log('');
+      const v = m.variants[0]; // auto-select highest quality
+      log('Loading selected quality…');
+      const { text: vText, base: vBase } = await fetchPlaylist(v.url);
+      media = HLS.parseMedia(vText, vBase);
     } else {
-      const media = HLS.parseMedia(text, base);
-      parsed = { media };
-      $('#quality').parentElement.hidden = true;
-      $('#info').textContent = media.segments.length + ' segments · ' + fmtTime(media.duration);
-      log('');
+      media = HLS.parseMedia(text, base);
     }
-    $('#opts').hidden = false;
+    if (!media.segments.length) throw new Error('The playlist has no segments.');
+    if (!media.ended) throw new Error('This looks like a live stream (no end marker), so it would never finish downloading.');
+
+    log('Downloading segments…');
+    updateJob({ state: 'downloading', done: 0, total: media.segments.length, message: 'Downloading segments' });
+
+    const t0 = performance.now();
+    const res = await HLS.downloadSegments(media, {
+      fetchBuf, signal: aborter.signal, skipFailed: false, concurrency: 6,
+      onProgress: (p) => {
+        const percent = Math.round(p.done / p.total * 100);
+        $('#bar').value = percent;
+        log(`Downloading ${p.done} / ${p.total} segments (${percent}%)`);
+        setDetail(`${fmtMB(p.bytes)} · ${fmtMB(p.bytes / ((performance.now() - t0) / 1000))}/s · ~${fmtTime(p.done ? ((performance.now() - t0) / 1000) * (p.total - p.done) / p.done : 0)} left`);
+        updateJob({ state: 'downloading', done: p.done, total: p.total, bytes: p.bytes, message: 'Downloading segments' });
+      }
+    });
+
+    log('Converting to MP4…');
+    updateJob({ state: 'converting', done: res.parts.length, total: media.segments.length, message: 'Converting to MP4' });
+    let blob = new Blob(res.parts, { type: media.map ? 'video/mp4' : 'video/mp2t' });
+    if (!media.map) blob = await remuxTs(blob);
+
+    const burl = URL.createObjectURL(blob);
+    const id = await chrome.downloads.download({ url: burl, filename: baseName + '.mp4', conflictAction: 'uniquify', saveAs: false });
+    await chrome.storage.session.set({ ['ddm-download:' + id]: { id, url: baseName + '.mp4', time: Date.now() } });
+
+    chrome.downloads.onChanged.addListener(function done(d) {
+      if (d.id === id && d.state && (d.state.current === 'complete' || d.state.current === 'interrupted')) {
+        chrome.downloads.onChanged.removeListener(done); URL.revokeObjectURL(burl);
+      }
+    });
+
+    log('✓ Done! Saved to Downloads', 'ok');
+    updateJob({ state: 'complete', done: media.segments.length, total: media.segments.length, message: 'Saved MP4' });
+
+    // Auto-close after a short delay
+    setTimeout(() => window.close(), 1500);
   } catch (e) {
-    const detail = e.message || e;
-    const hint = /^HTTP 404$/.test(detail)
-      ? 'The playlist URL has expired or is no longer valid. Close this tab, reload the video page, start playback again, and open Download.'
-      : 'If this says "Failed to fetch", the host name may not resolve on your network or the link has expired.';
-    log('Could not load playlist: ' + detail + '\n\n' + hint, 'err');
-  }
-  $('#load').disabled = false;
-}
-
-async function start() {
-  if (running) return;
-  running = true;
-  const jobId = crypto.randomUUID();
-  const jobKey = 'hls-job:' + jobId;
-
-  // Initialize job in storage
-  const initialJob = {
-    id: jobId,
-    name: $('#name').value || 'HLS video',
-    time: Date.now(),
-    state: 'starting',
-    done: 0,
-    total: 0,
-    message: 'Sending to background…'
-  };
-  await chrome.storage.session.set({ [jobKey]: initialJob });
-
-  $('#start').disabled = true; $('#cancel').hidden = false; $('#bar').hidden = false; $('#bar').value = 0;
-  log('Starting download in background…');
-
-  const params = {
-    jobId,
-    url: $('#url').value.trim(),
-    referrer: $('#referer').value.trim(),
-    name: $('#name').value.trim(),
-    qualityIndex: parseInt($('#quality').value || '0', 10),
-    skipFailed: $('#skip').checked
-  };
-
-  try {
-    const response = await chrome.runtime.sendMessage({ type: 'startHlsDownload', ...params });
-    if (!response.ok) throw new Error(response.error || 'Failed to start download');
-    log('Download started in background. You can close this window.', 'ok');
-    // Poll job status from storage
-    pollJobStatus(jobKey);
-  } catch (e) {
-    log('Failed to start: ' + (e.message || e), 'err');
-    await chrome.storage.session.set({ [jobKey]: { ...initialJob, state: 'failed', message: e.message || String(e) } });
+    const isCancelled = e.message === 'Cancelled' || aborter?.signal.aborted;
+    log(isCancelled ? 'Cancelled' : 'Failed: ' + (e.message || e), 'err');
+    updateJob({ state: isCancelled ? 'cancelled' : 'failed', message: e.message || String(e) });
   } finally {
-    running = false; $('#start').disabled = false; $('#cancel').hidden = true;
+    running = false; aborter = null;
   }
 }
 
-function pollJobStatus(jobKey) {
-  const check = async () => {
-    const data = await chrome.storage.session.get(jobKey);
-    const job = data[jobKey];
-    if (!job) return;
-
-    // Update UI with job status
-    if (job.done && job.total) {
-      $('#bar').value = Math.round(job.done / job.total * 100);
-    }
-    if (job.message) {
-      log(job.message);
-    }
-    if (job.state === 'downloading' || job.state === 'converting') {
-      setTimeout(check, 1000);
-    } else if (job.state === 'complete') {
-      log('✓ Download complete! Saved to Downloads folder.', 'ok');
-      $('#bar').value = 100;
-    } else if (job.state === 'failed' || job.state === 'cancelled') {
-      log('Download ' + job.state + ': ' + (job.message || ''), 'err');
-    }
-  };
-  check();
-}
-
-$('#load').addEventListener('click', load);
-$('#start').addEventListener('click', start);
-$('#cancel').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'cancelHlsDownload' }));
-$('#dashboard').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'openDashboard' }));
+$('#cancel').addEventListener('click', () => aborter?.abort());
 $('#closePopup').addEventListener('click', () => window.close());
-$('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
 
-$('#url').value = P.get('u') || '';
-$('#referer').value = P.get('r') || '';
-$('#name').value = HLS.safeName((P.get('n') || '').replace(/^Watching\s+/i, ''), 'video');
-if ($('#url').value) {
-  load().then(() => { if (P.get('auto') === '1' && parsed && parsed.media && !$('#opts').hidden) start(); });
+// Auto-start when page loads with URL params
+if (P.get('u')) {
+  running = true; aborter = new AbortController();
+  loadAndStart();
 }
