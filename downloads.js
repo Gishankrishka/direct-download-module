@@ -17,17 +17,24 @@ function progress(item) {
   if (!item.totalBytes || item.totalBytes < 0) return 'Unknown size';
   return `${Math.min(100, Math.round(item.bytesReceived / item.totalBytes * 100))}% (${formatBytes(item.bytesReceived)} / ${formatBytes(item.totalBytes)})`;
 }
+function speed(item) {
+  if (!item.bytesReceived || !item.startTime) return '';
+  const elapsed = (Date.now() - item.startTime) / 1000;
+  if (elapsed < 1) return '';
+  return `${formatBytes(item.bytesReceived / elapsed)}/s`;
+}
 function button(text, handler) {
   const element = document.createElement('button');
   element.textContent = text;
   element.addEventListener('click', handler);
   return element;
 }
+
 function render(items) {
   tbody.textContent = '';
   if (!items.length) {
     const row = document.createElement('tr');
-    row.innerHTML = '<td colspan="4" class="muted">No downloads found.</td>';
+    row.innerHTML = '<td colspan="4" class="muted">No active downloads from this extension.</td>';
     tbody.append(row);
     return;
   }
@@ -35,7 +42,8 @@ function render(items) {
     const row = document.createElement('tr');
     const file = document.createElement('td');
     file.textContent = item.filename || item.url || 'Unnamed download';
-    const detail = document.createElement('div'); detail.className = 'muted'; detail.textContent = formatDate(item.startTime);
+    const detail = document.createElement('div'); detail.className = 'muted';
+    detail.textContent = formatDate(item.startTime) + (speed(item) ? ` · ${speed(item)}` : '');
     file.append(detail);
     const state = document.createElement('td'); state.textContent = label(item);
     const amount = document.createElement('td'); amount.textContent = progress(item);
@@ -45,19 +53,49 @@ function render(items) {
     tbody.append(row);
   }
 }
+
+function renderHlsJobs(jobs) {
+  hlsJobs.textContent = '';
+  if (!jobs.length) {
+    hlsJobs.textContent = 'No active HLS processors.';
+    return;
+  }
+  const table = document.createElement('table');
+  table.style.width = '100%';
+  table.innerHTML = '<thead><tr><th>Name</th><th>State</th><th>Progress</th><th>Details</th></tr></thead>';
+  const tbody = document.createElement('tbody');
+  for (const job of jobs) {
+    const row = document.createElement('tr');
+    const percent = job.total ? Math.round(job.done / job.total * 100) : 0;
+    const name = document.createElement('td'); name.textContent = job.name;
+    const state = document.createElement('td'); state.textContent = job.state;
+    const prog = document.createElement('td');
+    const bar = document.createElement('progress');
+    bar.value = percent; bar.max = 100; bar.style.width = '100%';
+    prog.append(bar);
+    prog.append(` ${percent}%`);
+    if (job.bytes) {
+      const spd = document.createElement('div'); spd.className = 'muted'; spd.style.fontSize = '11px';
+      spd.textContent = `${formatBytes(job.bytes)} downloaded`;
+      prog.append(spd);
+    }
+    const details = document.createElement('td'); details.className = 'muted'; details.style.fontSize = '11px';
+    details.textContent = job.message || '';
+    if (job.failed) details.textContent += ` · ${job.failed} skipped`;
+    row.append(name, state, prog, details);
+    tbody.append(row);
+  }
+  table.append(tbody);
+  hlsJobs.append(table);
+}
+
 async function refreshJobs() {
   const all = await chrome.storage.session.get(null);
   const jobs = Object.values(all).filter((value) => value && value.id && value.state && value.name);
-  hlsJobs.textContent = '';
   const active = jobs.filter((job) => !['complete', 'cancelled', 'failed'].includes(job.state));
-  if (!active.length) { hlsJobs.textContent = 'No active HLS processors.'; return; }
-  for (const job of active) {
-    const item = document.createElement('div');
-    const percent = job.total ? Math.round(job.done / job.total * 100) : 0;
-    item.textContent = `${job.name} · ${job.state} · ${percent}% · ${job.message || ''}`;
-    hlsJobs.append(item);
-  }
+  renderHlsJobs(active);
 }
+
 async function refresh() {
   const tracked = await chrome.storage.session.get(null);
   const ids = new Set(Object.keys(tracked).filter((key) => key.startsWith('ddm-download:')).map((key) => Number(key.slice(13))));
@@ -67,8 +105,13 @@ async function refresh() {
   render(items);
   await refreshJobs();
 }
+
 $('#refresh').addEventListener('click', refresh);
 chrome.downloads.onCreated.addListener(refresh);
 chrome.downloads.onChanged.addListener(refresh);
 chrome.storage.onChanged.addListener(refreshJobs);
+
+/* Periodic poll for real-time progress updates */
+setInterval(refresh, 2000);
+
 refresh();

@@ -383,6 +383,30 @@ async function handle(msg, sender) {
       await openHls(msg.url || '', msg.page || '', msg.title || '', !!msg.auto);
       return { ok: true };
 
+    case 'startHlsDownload': {
+      // Create offscreen document if needed and forward the message
+      await chrome.offscreen.hasDocument().then(async (has) => {
+        if (!has) {
+          await chrome.offscreen.createDocument({
+            url: chrome.runtime.getURL('offscreen.html'),
+            reasons: ['WORKERS', 'IFRAME_SCRIPTING'],
+            justification: 'HLS stream download processing'
+          });
+        }
+      });
+      // Send message to offscreen document
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage(msg, resolve);
+      });
+    }
+
+    case 'cancelHlsDownload': {
+      // Forward cancel to offscreen document
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage(msg, resolve);
+      });
+    }
+
     case 'openDashboard':
       await chrome.tabs.create({ url: chrome.runtime.getURL('downloads.html') });
       return { ok: true };

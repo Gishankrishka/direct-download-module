@@ -1,7 +1,10 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>HLS stream downloader</title><link rel="stylesheet" href="ui.css"></head>
 <body><div class="page" style="max-width:820px">
-  <h1>HLS stream downloader</h1>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <h1>HLS stream downloader</h1>
+    <button id="closePopup" title="Close" style="background:none;border:none;font-size:20px;cursor:pointer;line-height:1;padding:4px 8px">✕</button>
+  </div>
   <p class="muted">Downloads every segment of an <code>.m3u8</code> stream and joins them into one file.</p>
   <label class="fld">Playlist URL (.m3u8)<input id="url" type="text" autocomplete="off"></label>
   <label class="fld">Referer (the page that plays the video)<input id="referer" type="text" autocomplete="off"></label>

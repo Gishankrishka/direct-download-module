@@ -129,65 +129,78 @@ async function load() {
 
 async function start() {
   if (running) return;
-  running = true; aborter = new AbortController();
-  updateJob({ state: 'downloading', done: 0, total: parsed?.media?.segments?.length || 0, message: 'Preparing stream' });
+  running = true;
+  const jobId = crypto.randomUUID();
+  const jobKey = 'hls-job:' + jobId;
+
+  // Initialize job in storage
+  const initialJob = {
+    id: jobId,
+    name: $('#name').value || 'HLS video',
+    time: Date.now(),
+    state: 'starting',
+    done: 0,
+    total: 0,
+    message: 'Sending to background…'
+  };
+  await chrome.storage.session.set({ [jobKey]: initialJob });
+
   $('#start').disabled = true; $('#cancel').hidden = false; $('#bar').hidden = false; $('#bar').value = 0;
+  log('Starting download in background…');
+
+  const params = {
+    jobId,
+    url: $('#url').value.trim(),
+    referrer: $('#referer').value.trim(),
+    name: $('#name').value.trim(),
+    qualityIndex: parseInt($('#quality').value || '0', 10),
+    skipFailed: $('#skip').checked
+  };
+
   try {
-    await setReferer();
-    let media = parsed.media;
-    if (parsed.master) {
-      const v = parsed.master.variants[$('#quality').value || 0];
-      log('Loading selected quality…');
-      const { text, base } = await fetchPlaylist(v.url);
-      media = HLS.parseMedia(text, base);
-    }
-    if (!media.segments.length) throw new Error('The playlist has no segments.');
-    if (!media.ended) throw new Error('This looks like a live stream (no end marker), so it would never finish downloading.');
-
-    const t0 = performance.now();
-    const res = await HLS.downloadSegments(media, {
-      fetchBuf, signal: aborter.signal, skipFailed: $('#skip').checked, concurrency: 6,
-      onProgress: (p) => {
-        updateJob({ state: 'downloading', done: p.done, total: p.total, bytes: p.bytes, failed: p.failed, message: 'Downloading segments' });
-        $('#bar').value = (p.done / p.total) * 100;
-        const rate = p.bytes / ((performance.now() - t0) / 1000);
-        const eta = p.done ? ((performance.now() - t0) / 1000) * (p.total - p.done) / p.done : 0;
-        log(`${p.done} / ${p.total} segments · ${fmtMB(p.bytes)} · ${fmtMB(rate)}/s · ~${fmtTime(eta)} left` + (p.failed ? ` · ${p.failed} skipped` : ''));
-      }
-    });
-
-    const base = HLS.safeName(withoutExtension($('#name').value.trim()), 'video');
-    let blob = new Blob(res.parts, { type: media.map ? 'video/mp4' : 'video/mp2t' });
-    if (!media.map) {
-      log('Downloaded all segments. Converting to MP4');
-      updateJob({ state: 'converting', done: res.parts.length, total: media.segments.length, message: 'Converting to MP4' });
-      blob = await remuxTs(blob);
-    }
-    const burl = URL.createObjectURL(blob);
-    const id = await chrome.downloads.download({ url: burl, filename: base + '.mp4', conflictAction: 'uniquify', saveAs: false });
-    await chrome.storage.session.set({ ['ddm-download:' + id]: { id, url: base + '.mp4', time: Date.now() } });
-    chrome.downloads.onChanged.addListener(function done(d) {
-      if (d.id === id && d.state && (d.state.current === 'complete' || d.state.current === 'interrupted')) {
-        chrome.downloads.onChanged.removeListener(done); URL.revokeObjectURL(burl);
-      }
-    });
-    $('#bar').value = 100;
-    let msg = `Done ✔  Saved ${base}.mp4 (${fmtMB(blob.size)}) to your Downloads folder.`;
-    if (res.failed.length) msg += `\nSkipped segments: ${res.failed.join(', ')}`;
-    log(msg, 'ok');
-    updateJob({ state: 'complete', done: media.segments.length, total: media.segments.length, message: 'Saved MP4' });
+    const response = await chrome.runtime.sendMessage({ type: 'startHlsDownload', ...params });
+    if (!response.ok) throw new Error(response.error || 'Failed to start download');
+    log('Download started in background. You can close this window.', 'ok');
+    // Poll job status from storage
+    pollJobStatus(jobKey);
   } catch (e) {
-    updateJob({ state: e.message === 'Cancelled' ? 'cancelled' : 'failed', message: e.message || String(e) });
-    log(e.message === 'Cancelled' ? 'Cancelled.' : 'Download failed: ' + (e.message || e), 'err');
+    log('Failed to start: ' + (e.message || e), 'err');
+    await chrome.storage.session.set({ [jobKey]: { ...initialJob, state: 'failed', message: e.message || String(e) } });
   } finally {
-    running = false; aborter = null; $('#start').disabled = false; $('#cancel').hidden = true;
+    running = false; $('#start').disabled = false; $('#cancel').hidden = true;
   }
+}
+
+function pollJobStatus(jobKey) {
+  const check = async () => {
+    const data = await chrome.storage.session.get(jobKey);
+    const job = data[jobKey];
+    if (!job) return;
+
+    // Update UI with job status
+    if (job.done && job.total) {
+      $('#bar').value = Math.round(job.done / job.total * 100);
+    }
+    if (job.message) {
+      log(job.message);
+    }
+    if (job.state === 'downloading' || job.state === 'converting') {
+      setTimeout(check, 1000);
+    } else if (job.state === 'complete') {
+      log('✓ Download complete! Saved to Downloads folder.', 'ok');
+      $('#bar').value = 100;
+    } else if (job.state === 'failed' || job.state === 'cancelled') {
+      log('Download ' + job.state + ': ' + (job.message || ''), 'err');
+    }
+  };
+  check();
 }
 
 $('#load').addEventListener('click', load);
 $('#start').addEventListener('click', start);
-$('#cancel').addEventListener('click', () => aborter?.abort());
+$('#cancel').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'cancelHlsDownload' }));
 $('#dashboard').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'openDashboard' }));
+$('#closePopup').addEventListener('click', () => window.close());
 $('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
 
 $('#url').value = P.get('u') || '';
