@@ -42,24 +42,30 @@ async function getOffscreenPort() {
   const hasDoc = await chrome.offscreen.hasDocument();
   if (!hasDoc) {
     try {
+      console.log('Creating offscreen document...');
       await chrome.offscreen.createDocument({
         url: chrome.runtime.getURL('offscreen.html'),
-        reasons: ['WORKERS', 'IFRAME_SCRIPTING'],
-        justification: 'HLS stream download processing'
+        reasons: ['WORKERS', 'BLOBS', 'LOCAL_STORAGE'],
+        justification: 'HLS stream download: fetch segments, remux with FFmpeg, save video file'
       });
+      console.log('Offscreen document created successfully');
     } catch (e) {
       console.error('Failed to create offscreen document:', e);
       return null;
     }
+  } else {
+    console.log('Offscreen document already exists');
   }
   // Wait for offscreen document to connect with timeout
   offscreenPortReady = {};
   offscreenPortReady.promise = new Promise((resolve) => { offscreenPortReady.resolve = resolve; });
   try {
-    return await Promise.race([
+    const port = await Promise.race([
       offscreenPortReady.promise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Offscreen connection timeout')), 10000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Offscreen connection timeout after 15s')), 15000))
     ]);
+    console.log('Offscreen port connected');
+    return port;
   } catch (e) {
     console.error('Offscreen port connection failed:', e);
     return null;
@@ -432,7 +438,10 @@ async function handle(msg, sender) {
     case 'startHlsDownload': {
       // Create offscreen document if needed and get port
       const port = await getOffscreenPort();
-      if (!port) return { ok: false, error: 'Failed to connect to offscreen document' };
+      if (!port) {
+        const hasDoc = await chrome.offscreen.hasDocument();
+        return { ok: false, error: hasDoc ? 'Offscreen document exists but port connection timed out' : 'Offscreen document creation failed - check service worker console for details' };
+      }
       // Send message via port
       return new Promise((resolve) => {
         port.onMessage.addListener(function listener(response) {
