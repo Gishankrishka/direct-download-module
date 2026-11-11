@@ -166,14 +166,19 @@ async function loadAndStart() {
         chrome.downloads.onChanged.removeListener(done);
         clearTimeout(revokeTimeout);
         URL.revokeObjectURL(burl);
+        if (d.state.current === 'complete') {
+          log('✓ Done! Saved to Downloads', 'ok');
+          updateJob({ state: 'complete', done: media.segments.length, total: media.segments.length, message: 'Saved MP4' });
+          // Auto-close when download actually completes
+          setTimeout(() => window.close(), 1000);
+        } else {
+          log('Download interrupted', 'err');
+          updateJob({ state: 'interrupted', message: 'Download interrupted' });
+        }
       }
     });
 
-    log('✓ Done! Saved to Downloads', 'ok');
-    updateJob({ state: 'complete', done: media.segments.length, total: media.segments.length, message: 'Saved MP4' });
-
-    // Auto-close after a short delay
-    setTimeout(() => window.close(), 1500);
+    log('Download started, waiting for completion…');
   } catch (e) {
     const isCancelled = e.message === 'Cancelled' || aborter?.signal.aborted;
     log(isCancelled ? 'Cancelled' : 'Failed: ' + (e.message || e), 'err');
