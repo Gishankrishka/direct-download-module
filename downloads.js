@@ -12,7 +12,7 @@ function formatBytes(bytes) {
   return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
 }
 function formatDate(value) { return value ? new Date(value).toLocaleString() : ''; }
-function label(item) { return item.state === 'complete' ? 'Complete' : item.state === 'interrupted' ? 'Interrupted' : item.paused ? 'Paused' : 'Downloading'; }
+function label(item) { return item.paused ? 'Paused' : 'Downloading'; }
 function progress(item) {
   if (!item.totalBytes || item.totalBytes < 0) return 'Unknown size';
   return `${Math.min(100, Math.round(item.bytesReceived / item.totalBytes * 100))}% (${formatBytes(item.bytesReceived)} / ${formatBytes(item.totalBytes)})`;
@@ -40,7 +40,6 @@ function render(items) {
     const state = document.createElement('td'); state.textContent = label(item);
     const amount = document.createElement('td'); amount.textContent = progress(item);
     const actions = document.createElement('td');
-    if (item.state === 'complete') actions.append(button('Open', () => chrome.downloads.open(item.id)));
     if (item.filename) actions.append(button('Show in folder', () => chrome.downloads.show(item.id)));
     row.append(file, state, amount, actions);
     tbody.append(row);
@@ -50,8 +49,9 @@ async function refreshJobs() {
   const all = await chrome.storage.session.get(null);
   const jobs = Object.values(all).filter((value) => value && value.id && value.state && value.name);
   hlsJobs.textContent = '';
-  if (!jobs.length) { hlsJobs.textContent = 'No HLS processors running.'; return; }
-  for (const job of jobs) {
+  const active = jobs.filter((job) => !['complete', 'cancelled', 'failed'].includes(job.state));
+  if (!active.length) { hlsJobs.textContent = 'No active HLS processors.'; return; }
+  for (const job of active) {
     const item = document.createElement('div');
     const percent = job.total ? Math.round(job.done / job.total * 100) : 0;
     item.textContent = `${job.name} · ${job.state} · ${percent}% · ${job.message || ''}`;
@@ -59,8 +59,11 @@ async function refreshJobs() {
   }
 }
 async function refresh() {
-  const items = await chrome.downloads.search({ orderBy: ['-startTime'], limit: 100 });
-  status.textContent = `${items.length} download${items.length === 1 ? '' : 's'}`;
+  const tracked = await chrome.storage.session.get(null);
+  const ids = new Set(Object.keys(tracked).filter((key) => key.startsWith('ddm-download:')).map((key) => Number(key.slice(13))));
+  const items = (await chrome.downloads.search({ orderBy: ['-startTime'], limit: 1000 }))
+    .filter((item) => ids.has(item.id) && item.state === 'in_progress');
+  status.textContent = `${items.length} active browser download${items.length === 1 ? '' : 's'}`;
   render(items);
   await refreshJobs();
 }

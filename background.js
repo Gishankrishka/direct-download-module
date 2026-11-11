@@ -55,6 +55,13 @@ async function addRefererRule(url, referrer) {
 }
 
 const dropRule = (id) => chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [id] }).catch(() => {});
+const trackDownload = (id, url) => chrome.storage.session.set({ ['ddm-download:' + id]: { id, url, time: Date.now() } }).catch(() => {});
+
+chrome.downloads.onChanged.addListener((delta) => {
+  if (delta.state && ['complete', 'interrupted'].includes(delta.state.current)) {
+    chrome.storage.session.remove('ddm-download:' + delta.id).catch(() => {});
+  }
+});
 
 /* ---------------------------------------------------------------------
  * The one place a download actually starts.
@@ -64,11 +71,13 @@ async function startDownload(url, { referrer = null, saveAs } = {}) {
   const settings = await getSettings();
   const ruleId = await addRefererRule(url, referrer).catch(() => null);
   try {
-    return await chrome.downloads.download({
+    const id = await chrome.downloads.download({
       url,
       conflictAction: 'uniquify',
       saveAs: saveAs ?? settings.saveAs
     });
+    trackDownload(id, url);
+    return id;
   } finally {
     if (ruleId) setTimeout(() => dropRule(ruleId), 20000);
   }

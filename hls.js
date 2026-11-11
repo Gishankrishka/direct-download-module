@@ -165,6 +165,7 @@ async function start() {
     }
     const burl = URL.createObjectURL(blob);
     const id = await chrome.downloads.download({ url: burl, filename: base + '.mp4', conflictAction: 'uniquify', saveAs: false });
+    await chrome.storage.session.set({ ['ddm-download:' + id]: { id, url: base + '.mp4', time: Date.now() } });
     chrome.downloads.onChanged.addListener(function done(d) {
       if (d.id === id && d.state && (d.state.current === 'complete' || d.state.current === 'interrupted')) {
         chrome.downloads.onChanged.removeListener(done); URL.revokeObjectURL(burl);
