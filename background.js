@@ -41,16 +41,29 @@ async function getOffscreenPort() {
   // Create offscreen document if needed
   const hasDoc = await chrome.offscreen.hasDocument();
   if (!hasDoc) {
-    await chrome.offscreen.createDocument({
-      url: chrome.runtime.getURL('offscreen.html'),
-      reasons: ['WORKERS', 'IFRAME_SCRIPTING'],
-      justification: 'HLS stream download processing'
-    });
+    try {
+      await chrome.offscreen.createDocument({
+        url: chrome.runtime.getURL('offscreen.html'),
+        reasons: ['WORKERS', 'IFRAME_SCRIPTING'],
+        justification: 'HLS stream download processing'
+      });
+    } catch (e) {
+      console.error('Failed to create offscreen document:', e);
+      return null;
+    }
   }
-  // Wait for offscreen document to connect
+  // Wait for offscreen document to connect with timeout
   offscreenPortReady = {};
   offscreenPortReady.promise = new Promise((resolve) => { offscreenPortReady.resolve = resolve; });
-  return offscreenPortReady.promise;
+  try {
+    return await Promise.race([
+      offscreenPortReady.promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Offscreen connection timeout')), 10000))
+    ]);
+  } catch (e) {
+    console.error('Offscreen port connection failed:', e);
+    return null;
+  }
 }
 
 /* ---------------------------------------------------------------------
