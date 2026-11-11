@@ -384,27 +384,38 @@ async function handle(msg, sender) {
       return { ok: true };
 
     case 'startHlsDownload': {
-      // Create offscreen document if needed and forward the message
-      await chrome.offscreen.hasDocument().then(async (has) => {
-        if (!has) {
-          await chrome.offscreen.createDocument({
-            url: chrome.runtime.getURL('offscreen.html'),
-            reasons: ['WORKERS', 'IFRAME_SCRIPTING'],
-            justification: 'HLS stream download processing'
-          });
-        }
-      });
-      // Send message to offscreen document
-      return new Promise((resolve) => {
-        chrome.runtime.sendMessage(msg, resolve);
-      });
+      // Create offscreen document if needed
+      const hasDoc = await chrome.offscreen.hasDocument();
+      if (!hasDoc) {
+        await chrome.offscreen.createDocument({
+          url: chrome.runtime.getURL('offscreen.html'),
+          reasons: ['WORKERS', 'IFRAME_SCRIPTING'],
+          justification: 'HLS stream download processing'
+        });
+        // Wait for offscreen document to load and register listeners
+        await new Promise(r => setTimeout(r, 500));
+      }
+      // Send message to offscreen document with retry
+      for (let i = 0; i < 5; i++) {
+        try {
+          const response = await chrome.runtime.sendMessage(msg);
+          if (response) return response;
+        } catch { /* ignore */ }
+        await new Promise(r => setTimeout(r, 300));
+      }
+      return { ok: false, error: 'Offscreen document not ready' };
     }
 
     case 'cancelHlsDownload': {
-      // Forward cancel to offscreen document
-      return new Promise((resolve) => {
-        chrome.runtime.sendMessage(msg, resolve);
-      });
+      // Forward cancel to offscreen document with retry
+      for (let i = 0; i < 5; i++) {
+        try {
+          const response = await chrome.runtime.sendMessage(msg);
+          if (response) return response;
+        } catch { /* ignore */ }
+        await new Promise(r => setTimeout(r, 300));
+      }
+      return { ok: false, error: 'Offscreen document not ready' };
     }
 
     case 'openDashboard':
