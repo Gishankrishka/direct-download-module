@@ -159,7 +159,7 @@ async function loadAndStart() {
 }
 
 $('#cancel').addEventListener('click', () => aborter?.abort());
-$('#closePopup').addEventListener('click', () => window.close());
+$('#dashboard').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'openDashboard' }));
 
 // Auto-start when page loads with URL params
 if (P.get('u')) {
