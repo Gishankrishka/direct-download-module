@@ -203,7 +203,7 @@ async function loadAndStart() {
   }
 }
 
-$('#cancel').addEventListener('click', () => aborter?.abort());
+$('#cancel').addEventListener('click', () => { aborter?.abort(); setTimeout(() => window.close(), 500); });
 $('#dashboard').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'openDashboard' }));
 
 // Auto-start when page loads with URL params
