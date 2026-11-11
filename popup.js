@@ -57,6 +57,7 @@ async function init() {
   });
   $('#all').addEventListener('click', async () => { await send({ type: 'pickLinks', tabId: tab.id, selectedOnly: false }); window.close(); });
   $('#hls').addEventListener('click', async () => { await send({ type: 'openHls', url: '', page: tab.url, title: tab.title }); window.close(); });
+  $('#dashboard').addEventListener('click', async () => { await send({ type: 'openDashboard' }); window.close(); });
   $('#sel').addEventListener('click', async () => { await send({ type: 'pickLinks', tabId: tab.id, selectedOnly: true }); window.close(); });
 
   const key = 'media:' + tab.id;

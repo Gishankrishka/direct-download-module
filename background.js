@@ -78,7 +78,9 @@ const M3U8 = /m3u8/i;
 function openHls(url, page, title, auto) {
   const q = new URLSearchParams({ u: url, r: page || '', n: title || '' });
   if (auto) q.set('auto', '1');
-  return chrome.tabs.create({ url: chrome.runtime.getURL('hls.html?' + q) });
+  return chrome.windows.create({
+    url: chrome.runtime.getURL('hls.html?' + q), type: 'popup', width: 900, height: 760, focused: true
+  });
 }
 /* Plain files go to the browser's download engine; HLS playlists go to the stream downloader. */
 async function smartDownload(url, referrer, title) {
@@ -370,6 +372,10 @@ async function handle(msg, sender) {
 
     case 'openHls':
       await openHls(msg.url || '', msg.page || '', msg.title || '', !!msg.auto);
+      return { ok: true };
+
+    case 'openDashboard':
+      await chrome.tabs.create({ url: chrome.runtime.getURL('downloads.html') });
       return { ok: true };
 
     case 'refreshMedia': {

@@ -14,6 +14,10 @@ server.
 - MPEG-TS streams are remuxed to MP4 inside the extension with bundled WebAssembly.
 - Optional `Referer` and `Origin` handling for protected, non-DRM media.
 - YouTube page detection with a one-click browser-native download attempt.
+- Browser recording fallback for videos whose source URL cannot be downloaded.
+- Close controls for hiding the on-video download overlay.
+- Persistent popup toggle to disable and re-enable the extension.
+- Closable HLS downloader popup and a live downloads dashboard.
 
 ## Install From Source
 
@@ -35,8 +39,14 @@ avoid duplicate buttons and conflicting background workers.
 Use the toolbar popup to paste a URL, inspect media detected on the active tab,
 or open the HLS downloader. On a playing video, use the blue **Download** button
 to select a detected file or HLS quality. The context menu provides direct and
-batch link downloads. On a YouTube page, the popup can attempt a browser-native
-download of detected media.
+batch link downloads. The on-video overlay can be closed with its `X` button.
+On a YouTube page, the popup can attempt a browser-native download of detected
+media. Use **Enable extension** in the popup to temporarily disable or re-enable
+the overlay and download actions.
+
+HLS downloads open in a separate closable popup window instead of a normal tab.
+Use **Downloads dashboard** when you want a full tab showing active and recent
+browser downloads.
 
 YouTube requires signed DASH URLs and frequently separates video and audio.
 YouTube often exposes separate signed video and audio streams. A normal browser
@@ -71,6 +81,7 @@ cannot be bypassed by a normal extension.
 | `hls-core.js` | Standalone HLS parsing, decryption, and segment logic |
 | `hls.html` / `hls.js` | HLS downloader page and MP4 conversion |
 | `popup.html` / `popup.js` | Toolbar popup |
+| `downloads.html` / `downloads.js` | Live downloads dashboard |
 | `links.html` / `links.js` | Batch link picker |
 | `ffmpeg-core.wasm` | Bundled WebAssembly remuxing engine |
 
