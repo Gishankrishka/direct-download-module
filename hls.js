@@ -7,8 +7,20 @@ let converter = null, converterLoading = null;
 const jobId = crypto.randomUUID();
 const jobKey = 'hls-job:' + jobId;
 
-const log = (t, cls) => { const el = $('#status'); el.textContent = t; el.className = cls || ''; };
+const log = (t, cls) => {
+  const el = $('#status');
+  el.textContent = t;
+  if (cls === 'ok') el.dataset.state = 'complete';
+  else if (cls === 'err') el.dataset.state = 'error';
+  else el.dataset.state = 'downloading';
+};
 const setDetail = (t) => { $('#detail').textContent = t; };
+const setProgress = (p) => {
+  const fill = $('#progressFill');
+  if (fill) fill.style.width = p + '%';
+  const pct = $('#progressPercent');
+  if (pct) pct.textContent = Math.round(p) + '%';
+};
 const updateJob = (data) => chrome.storage.session.set({ [jobKey]: { id: jobId, name: $('#fileName').textContent || 'HLS video', time: Date.now(), ...data } }).catch(() => {});
 
 /* The fetches below come from this extension page, so give them the same Referer/Origin
@@ -94,7 +106,7 @@ async function loadAndStart() {
 
   const title = P.get('n') || '';
   const baseName = safeName(title.replace(/^Watching\s+/i, ''), 'video');
-  $('#fileName').textContent = baseName;
+  $('#fileName').textContent = baseName + '.mp4';
 
   await setReferer();
   log('Loading playlist…');
@@ -123,14 +135,14 @@ async function loadAndStart() {
       fetchBuf, signal: aborter.signal, skipFailed: false, concurrency: 6,
       onProgress: (p) => {
         const percent = Math.round(p.done / p.total * 100);
-        $('#bar').style.width = percent + '%';
+        setProgress(percent);
         log(`Downloading ${p.done} / ${p.total} segments (${percent}%)`);
         setDetail(`${fmtMB(p.bytes)} · ${fmtMB(p.bytes / ((performance.now() - t0) / 1000))}/s · ~${fmtTime(p.done ? ((performance.now() - t0) / 1000) * (p.total - p.done) / p.done : 0)} left`);
         updateJob({ state: 'downloading', done: p.done, total: p.total, bytes: p.bytes, message: 'Downloading segments' });
       }
     });
 
-    log('Converting to MP4…');
+    log('Converting to MP4…', 'converting');
     updateJob({ state: 'converting', done: res.parts.length, total: media.segments.length, message: 'Converting to MP4' });
     let blob = new Blob(res.parts, { type: media.map ? 'video/mp4' : 'video/mp2t' });
     log(`Initial blob: ${fmtMB(blob.size)}`);
@@ -168,6 +180,8 @@ async function loadAndStart() {
         URL.revokeObjectURL(burl);
         if (d.state.current === 'complete') {
           log('✓ Done! Saved to Downloads', 'ok');
+          $('#progressFill').dataset.complete = 'true';
+          setProgress(100);
           updateJob({ state: 'complete', done: media.segments.length, total: media.segments.length, message: 'Saved MP4' });
           // Auto-close when download actually completes
           setTimeout(() => window.close(), 1000);
@@ -182,6 +196,7 @@ async function loadAndStart() {
   } catch (e) {
     const isCancelled = e.message === 'Cancelled' || aborter?.signal.aborted;
     log(isCancelled ? 'Cancelled' : 'Failed: ' + (e.message || e), 'err');
+    $('#progressFill').dataset.complete = 'false';
     updateJob({ state: isCancelled ? 'cancelled' : 'failed', message: e.message || String(e) });
   } finally {
     running = false; aborter = null;

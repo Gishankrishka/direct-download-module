@@ -1,51 +1,141 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>HLS download</title><link rel="stylesheet" href="ui.css">
 <style>
-  .page { max-width:420px; padding:14px 16px; }
-  h1 { font-size:13px; font-weight:600; margin:0 0 10px; color:#111827; letter-spacing:.2px; }
-  @media (prefers-color-scheme:dark) { h1 { color:#f3f4f6; } }
+  :root {
+    --bg: #fafafa;
+    --bg-elevated: #fff;
+    --fg: #1a1a2e;
+    --fg-muted: #6b7280;
+    --fg-subtle: #9ca3af;
+    --accent: #0d9488;
+    --accent-hover: #0f766e;
+    --accent-light: #ccfbf1;
+    --border: #e5e7eb;
+    --shadow: 0 2px 8px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-hover: 0 4px 16px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.05);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --transition: 140ms cubic-bezier(.2,.8,.2,1);
+  }
+  @media (prefers-color-scheme:dark) {
+    :root {
+      --bg: #14141b;
+      --bg-elevated: #1c1c24;
+      --fg: #f0f0f5;
+      --fg-muted: #9ca3af;
+      --fg-subtle: #6b7280;
+      --accent: #14b8a6;
+      --accent-hover: #0d9488;
+      --accent-light: #0f3d3a;
+      --border: #2d2d3a;
+      --shadow: 0 2px 8px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2);
+      --shadow-hover: 0 4px 16px rgba(0,0,0,.4), 0 2px 4px rgba(0,0,0,.25);
+    }
+  }
 
-  #fileName { font-size:12px; color:#6b7280; margin-bottom:12px; word-break:break-all; line-height:1.4; }
-  @media (prefers-color-scheme:dark) { #fileName { color:#9ca3af; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); font:13px/1.45 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; color:var(--fg); -webkit-font-smoothing:antialiased; }
+  .page { max-width:420px; margin:0 auto; padding:16px; min-height:100vh; display:flex; flex-direction:column; }
 
-  /* Custom progress bar */
-  .progress-wrap { position:relative; height:8px; border-radius:999px; background:#e5e7eb; overflow:hidden; margin-bottom:10px; }
-  @media (prefers-color-scheme:dark) { .progress-wrap { background:#374151; } }
-  .progress-bar { height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg,#2563eb,#3b82f6); transition:width .25s ease; position:relative; }
-  .progress-bar::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,rgba(255,255,255,.15),transparent); border-radius:999px; }
+  /* Header */
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px; }
+  .title-row { display:flex; align-items:center; gap:8px; }
+  .icon { width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,var(--accent),#06b6d4); display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px; flex-shrink:0; box-shadow:0 2px 6px rgba(13,148,136,.3); }
+  h1 { font-size:14px; font-weight:600; margin:0; letter-spacing:-.01em; color:var(--fg); }
+  .subtitle { font-size:11px; color:var(--fg-subtle); margin-top:1px; font-weight:400; }
 
-  #status { font-size:12px; color:#374151; margin-bottom:4px; min-height:18px; }
-  @media (prefers-color-scheme:dark) { #status { color:#e5e7eb; } }
-  #status.ok { color:#15803d; }
-  @media (prefers-color-scheme:dark) { #status.ok { color:#4ade80; } }
-  #status.err { color:#b91c1c; }
-  @media (prefers-color-scheme:dark) { #status.err { color:#f87171; } }
+  /* File name card */
+  .file-card { background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius); padding:10px 12px; margin-bottom:14px; box-shadow:var(--shadow); transition:box-shadow var(--transition), border-color var(--transition); }
+  .file-card:hover { border-color:var(--accent); box-shadow:var(--shadow-hover); }
+  .file-name { font-size:12px; font-weight:500; color:var(--fg); word-break:break-all; line-height:1.4; font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,monospace; }
+  .file-ext { color:var(--accent); font-weight:600; }
 
-  #detail { font-size:11px; color:#6b7280; margin-bottom:8px; font-variant-numeric:tabular-nums; }
-  @media (prefers-color-scheme:dark) { #detail { color:#9ca3af; } }
+  /* Progress section */
+  .progress-section { margin-bottom:12px; }
+  .progress-label { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; font-size:11px; color:var(--fg-muted); }
+  .progress-percent { font-variant-numeric:tabular-nums; font-weight:600; color:var(--accent); font-size:12px; }
+  .progress-track { height:6px; background:var(--border); border-radius:999px; overflow:hidden; position:relative; }
+  .progress-fill { height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg,var(--accent),#06b6d4); transition:width .3s cubic-bezier(.2,.8,.2,1); position:relative; }
+  .progress-fill::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,rgba(255,255,255,.2),transparent 60%); border-radius:999px; }
+  .progress-fill[data-complete="true"] { background:linear-gradient(90deg,#15803d,#16a34a); }
+  .progress-fill[data-complete="true"]::after { background:linear-gradient(90deg,rgba(255,255,255,.2),transparent 60%); }
 
-  .btn-row { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
-  button { font:inherit; cursor:pointer; border:1px solid #d1d5db; background:#fff; color:#111827; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:500; transition:all .12s ease; }
-  @media (prefers-color-scheme:dark) { button { border-color:#4b5563; background:#1f2937; color:#f3f4f6; } }
-  button:hover { border-color:#2563eb; background:#eff6ff; }
-  @media (prefers-color-scheme:dark) { button:hover { border-color:#3b82f6; background:#1e3a5f; } }
-  button:active { transform:scale(.98); }
-  button:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
-  button#cancel { background:#fff; }
-  @media (prefers-color-scheme:dark) { button#cancel { background:#1f2937; } }
-  button#dashboard { background:#2563eb; color:#fff; border-color:#2563eb; }
-  button#dashboard:hover { background:#1d4ed8; border-color:#1d4ed8; }
+  /* Status & detail */
+  .status-row { display:flex; align-items:center; gap:10px; margin:10px 0 4px; min-height:20px; }
+  .status { font-size:12px; color:var(--fg-muted); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:color var(--transition); }
+  .status.downloading { color:var(--accent); }
+  .status.converting { color:#d97706; }
+  .status.complete { color:#15803d; font-weight:500; }
+  .status.error { color:#dc2626; font-weight:500; }
+  .status.cancelled { color:#6b7280; }
+
+  .detail { font-size:11px; color:var(--fg-subtle); font-variant-numeric:tabular-nums; font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,monospace; margin-bottom:12px; }
+
+  /* Buttons */
+  .btn-row { display:flex; gap:8px; justify-content:flex-end; margin-top:4px; }
+  .btn { font:inherit; cursor:pointer; border:1px solid var(--border); background:var(--bg-elevated); color:var(--fg); border-radius:var(--radius-sm); padding:7px 14px; font-size:12px; font-weight:550; transition:all var(--transition); display:inline-flex; align-items:center; gap:6px; min-width:84px; justify-content:center; }
+  .btn:hover { border-color:var(--accent); background:var(--accent-light); color:var(--accent-hover); transform:translateY(-1px); box-shadow:0 2px 6px rgba(13,148,136,.15); }
+  .btn:active { transform:translateY(0); }
+  .btn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-color:var(--accent); }
+  .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); color:#fff; background:linear-gradient(135deg,var(--accent-hover),var(--accent)); box-shadow:0 3px 10px rgba(13,148,136,.25); }
+  .btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+
+  /* Subtle entrance animation */
+  @keyframes slideUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  .page > * { animation:slideUp .35s cubic-bezier(.2,.8,.2,1) both; }
+  .page > *:nth-child(1) { animation-delay:0ms; }
+  .page > *:nth-child(2) { animation-delay:40ms; }
+  .page > *:nth-child(3) { animation-delay:80ms; }
+  .page > *:nth-child(4) { animation-delay:120ms; }
+  .page > *:nth-child(5) { animation-delay:160ms; }
+  .page > *:nth-child(6) { animation-delay:200ms; }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion:reduce) {
+    *, *::before, *::after { animation:none !important; transition:none !important; }
+  }
 </style>
 </head>
 <body><div class="page">
-  <h1>HLS Download</h1>
-  <div id="fileName" class="muted"></div>
-  <div class="progress-wrap"><div id="bar" class="progress-bar" style="width:0%"></div></div>
-  <div id="status"></div>
-  <div id="detail"></div>
+  <header class="header">
+    <div class="title-row">
+      <div class="icon" aria-hidden="true">▶</div>
+      <div>
+        <h1>HLS Download</h1>
+        <div class="subtitle">Streaming to MP4</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="file-card" id="fileCard">
+    <div class="file-name" id="fileName">Preparing…</div>
+  </div>
+
+  <section class="progress-section" aria-label="Download progress">
+    <div class="progress-label">
+      <span>Progress</span>
+      <span class="progress-percent" id="progressPercent">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Download progress"></div>
+    </div>
+  </section>
+
+  <div class="status-row">
+    <span class="status" id="status" data-state="idle">Initializing…</span>
+  </div>
+  <div class="detail" id="detail"></div>
+
   <div class="btn-row">
-    <button id="dashboard">Open Dashboard</button>
-    <button id="cancel">Cancel</button>
+    <button class="btn primary" id="dashboard" aria-label="Open downloads dashboard">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </button>
+    <button class="btn" id="cancel" aria-label="Cancel download">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      Cancel
+    </button>
   </div>
 </div>
 <script src="ffmpeg.js"></script><script src="hls-core.js"></script><script src="hls.js"></script></body></html>
