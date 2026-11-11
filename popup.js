@@ -2,7 +2,7 @@
 const $ = (s) => document.querySelector(s);
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 const isYouTube = (url) => { try { const host = new URL(url).hostname.toLowerCase(); return host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be'; } catch { return false; } };
-const say = (t, bad) => { const el = $('#msg'); el.textContent = t; el.className = bad ? 'err' : 'ok'; };
+const say = (t, bad) => { const el = $('#msg'); el.textContent = t; el.className = 'msg ' + (bad ? 'err' : 'ok'); };
 const send = (m) => chrome.runtime.sendMessage(m);
 
 function fmtSize(n) {
@@ -15,10 +15,10 @@ function fileName(url) {
   try { return decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || new URL(url).hostname); }
   catch { return url; }
 }
-function btn(label, fn, primary) {
+function createBtn(label, fn, primary) {
   const b = document.createElement('button');
   b.textContent = label;
-  if (primary) b.className = 'primary';
+  b.className = 'btn' + (primary ? ' primary' : '');
   b.addEventListener('click', fn);
   return b;
 }
@@ -66,31 +66,41 @@ async function init() {
   const ul = $('#media');
   if (!list.length) {
     const li = document.createElement('li');
-    li.className = 'muted';
-    li.textContent = 'Nothing yet. Start playing a video or audio, then reopen this popup.';
+    li.className = 'media-item';
+    li.innerHTML = '<div class="muted" style="text-align:center;padding:16px">Nothing yet. Start playing a video or audio, then reopen this popup.</div>';
     ul.append(li);
+    return;
   }
   for (const e of list) {
     const li = document.createElement('li');
-    const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = fileName(e.url);
-    const meta = document.createElement('div'); meta.className = 'meta';
+    li.className = 'media-item';
+
+    const nm = document.createElement('div');
+    nm.className = 'media-name';
+    nm.textContent = fileName(e.url);
+
+    const meta = document.createElement('div');
+    meta.className = 'media-meta';
     meta.textContent = [e.kind === 'stream' ? 'HLS/DASH stream' : e.mime, fmtSize(e.size)].filter(Boolean).join(' · ');
-    const row = document.createElement('div'); row.className = 'btns';
+
+    const row = document.createElement('div');
+    row.className = 'media-actions';
+
     if (e.kind === 'file') {
       row.append(
-        btn('Download', async () => {
+        createBtn('Download', async () => {
           const r = await send({ type: 'downloadUrl', url: e.url, referrer: e.page });
           r?.ok ? say('Download started') : say(r?.error || 'Failed', true);
         }, true),
-        btn('Copy URL', () => copy(e.url, 'URL'))
+        createBtn('Copy URL', () => copy(e.url, 'URL'))
       );
     } else {
       const ref = e.page ? '--referer ' + shq(e.page) + ' ' : '';
-      if (e.hls) row.append(btn('Download as file', async () => { await send({ type: 'openHls', url: e.url, page: e.page, title: e.title, tabId: tab.id }); window.close(); }, true));
+      if (e.hls) row.append(createBtn('Download as file', async () => { await send({ type: 'openHls', url: e.url, page: e.page, title: e.title, tabId: tab.id }); window.close(); }, true));
       row.append(
-        btn('Copy yt-dlp command', () => copy(`yt-dlp ${ref}${shq(e.url)}`, 'yt-dlp command'), !e.hls),
-        btn('Copy ffmpeg command', () => copy(`ffmpeg ${e.page ? '-headers ' + shq('Referer: ' + e.page) + ' ' : ''}-i ${shq(e.url)} -c copy output.mp4`, 'ffmpeg command')),
-        btn('Copy URL', () => copy(e.url, 'URL'))
+        createBtn('Copy yt-dlp', () => copy(`yt-dlp ${ref}${shq(e.url)}`, 'yt-dlp command'), !e.hls),
+        createBtn('Copy ffmpeg', () => copy(`ffmpeg ${e.page ? '-headers ' + shq('Referer: ' + e.page) + ' ' : ''}-i ${shq(e.url)} -c copy output.mp4`, 'ffmpeg command')),
+        createBtn('Copy URL', () => copy(e.url, 'URL'))
       );
     }
     li.append(nm, meta, row);

@@ -1,14 +1,48 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Direct Download Module</title><link rel="stylesheet" href="ui.css"></head>
 <body class="popup">
-  <h1>Direct Download Module</h1>
-  <form id="urlForm"><input id="url" placeholder="Paste a URL to download…" autocomplete="off"><button class="primary">Download</button></form>
-  <div class="row"><button id="all">All links on page</button><button id="sel">Selected links</button><button id="hls">HLS downloader…</button><button id="dashboard">Downloads dashboard</button></div>
-  <div id="youtube" class="row" hidden><button id="youtubeDownload" class="primary">Download YouTube video</button></div>
-  <label><input type="checkbox" id="enabled" checked> Enable extension</label>
-  <h2>Media detected on this tab <span id="count" class="muted"></span></h2>
-  <ul id="media"></ul>
-  <label><input type="checkbox" id="saveAs"> Ask where to save each file</label>
-  <div id="msg"></div>
+  <header class="header">
+    <div class="title-row">
+      <div class="icon-badge" aria-hidden="true">↓</div>
+      <div>
+        <h1>Direct Download Module</h1>
+        <div class="subtitle">Download links, media & HLS streams</div>
+      </div>
+    </div>
+  </header>
+
+  <form id="urlForm" class="fld">
+    <label for="url">Download URL</label>
+    <div class="row" style="gap:8px">
+      <input id="url" type="url" placeholder="Paste a URL to download…" autocomplete="off" style="flex:1">
+      <button type="submit" class="btn primary">Download</button>
+    </div>
+  </form>
+
+  <div class="row" style="gap:8px; margin-top:4px">
+    <button id="all" class="btn" style="flex:1">All links</button>
+    <button id="sel" class="btn" style="flex:1">Selected</button>
+    <button id="hls" class="btn" style="flex:1">HLS downloader</button>
+    <button id="dashboard" class="btn" style="flex:1">Dashboard</button>
+  </div>
+
+  <div id="youtube" class="fld" hidden>
+    <button id="youtubeDownload" class="btn primary" style="width:100%">Download YouTube video</button>
+  </div>
+
+  <label class="inline fld" style="margin-top:8px">
+    <input type="checkbox" id="enabled" checked>
+    <span>Enable extension</span>
+  </label>
+
+  <label class="inline fld">
+    <input type="checkbox" id="saveAs">
+    <span>Ask where to save each file</span>
+  </label>
+
+  <h2>Media detected on this tab <span id="count" class="subtle"></span></h2>
+  <ul id="media" class="media-list"></ul>
+
+  <div id="msg" class="msg"></div>
   <script src="popup.js"></script>
 </body></html>

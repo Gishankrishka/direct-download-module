@@ -2,11 +2,38 @@
 <html><head><meta charset="utf-8"><title>Downloads dashboard</title><link rel="stylesheet" href="ui.css"></head>
 <body>
   <main class="page">
-    <div class="bar"><h1>Downloads dashboard</h1><button id="refresh">Refresh</button></div>
-    <p class="muted">Active downloads started by this extension.</p>
-    <div id="status" class="muted"></div>
-    <section><h2>HLS processors</h2><div id="hlsJobs" class="muted">No active HLS processors.</div></section>
-    <table><thead><tr><th>File</th><th>Status</th><th>Progress</th><th>Actions</th></tr></thead><tbody id="downloads"></tbody></table>
+    <header class="header">
+      <div class="title-row">
+        <div class="icon-badge" aria-hidden="true">⬇</div>
+        <div>
+          <h1>Downloads Dashboard</h1>
+          <div class="subtitle">Active downloads from this extension</div>
+        </div>
+      </div>
+      <button id="refresh" class="btn">Refresh</button>
+    </header>
+
+    <div id="status" class="msg info"></div>
+
+    <section aria-labelledby="hls-heading">
+      <h2 id="hls-heading">HLS Processors</h2>
+      <div id="hlsJobs"></div>
+    </section>
+
+    <section aria-labelledby="dl-heading">
+      <h2 id="dl-heading">Browser Downloads</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Status</th>
+            <th>Progress</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="downloads"></tbody>
+      </table>
+    </section>
   </main>
   <script src="downloads.js"></script>
 </body></html>

@@ -26,27 +26,56 @@ function speed(item) {
 function button(text, handler) {
   const element = document.createElement('button');
   element.textContent = text;
+  element.className = 'btn';
   element.addEventListener('click', handler);
   return element;
+}
+function statusBadge(text) {
+  const span = document.createElement('span');
+  span.className = 'status-badge ' + text.toLowerCase().replace(/\s+/g, '-');
+  span.textContent = text;
+  return span;
+}
+function progressBar(percent, complete) {
+  const wrapper = document.createElement('div');
+  wrapper.style.width = '100%';
+  wrapper.innerHTML = `<div class="progress-track"><div class="progress-fill" style="width:${percent}%" ${complete ? 'data-complete="true"' : ''}></div></div>`;
+  const pct = document.createElement('span');
+  pct.style.marginLeft = '8px';
+  pct.style.fontSize = '12px';
+  pct.style.fontWeight = '600';
+  pct.style.color = 'var(--color-accent)';
+  pct.style.fontVariantNumeric = 'tabular-nums';
+  pct.textContent = percent + '%';
+  wrapper.append(pct);
+  return wrapper;
 }
 
 function render(items) {
   tbody.textContent = '';
   if (!items.length) {
     const row = document.createElement('tr');
-    row.innerHTML = '<td colspan="4" class="muted">No active downloads from this extension.</td>';
+    row.innerHTML = '<td colspan="4" class="muted" style="padding:24px;text-align:center">No active downloads from this extension.</td>';
     tbody.append(row);
     return;
   }
   for (const item of items) {
     const row = document.createElement('tr');
     const file = document.createElement('td');
-    file.textContent = item.filename || item.url || 'Unnamed download';
-    const detail = document.createElement('div'); detail.className = 'muted';
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'file-display';
+    nameDiv.textContent = item.filename || item.url || 'Unnamed download';
+    const detail = document.createElement('div');
+    detail.className = 'muted';
+    detail.style.fontSize = '10px';
+    detail.style.marginTop = '4px';
     detail.textContent = formatDate(item.startTime) + (speed(item) ? ` · ${speed(item)}` : '');
-    file.append(detail);
-    const state = document.createElement('td'); state.textContent = label(item);
-    const amount = document.createElement('td'); amount.textContent = progress(item);
+    file.append(nameDiv, detail);
+    const state = document.createElement('td');
+    state.append(statusBadge(label(item)));
+    const amount = document.createElement('td');
+    const pct = item.totalBytes && item.totalBytes > 0 ? Math.round(item.bytesReceived / item.totalBytes * 100) : 0;
+    amount.append(progressBar(pct, false));
     const actions = document.createElement('td');
     if (item.filename) actions.append(button('Show in folder', () => chrome.downloads.show(item.id)));
     row.append(file, state, amount, actions);
@@ -57,7 +86,7 @@ function render(items) {
 function renderHlsJobs(jobs) {
   hlsJobs.textContent = '';
   if (!jobs.length) {
-    hlsJobs.textContent = 'No active HLS processors.';
+    hlsJobs.innerHTML = '<div class="msg info" style="text-align:center;padding:16px">No active HLS processors.</div>';
     return;
   }
   const table = document.createElement('table');
@@ -67,19 +96,25 @@ function renderHlsJobs(jobs) {
   for (const job of jobs) {
     const row = document.createElement('tr');
     const percent = job.total ? Math.round(job.done / job.total * 100) : 0;
-    const name = document.createElement('td'); name.textContent = job.name;
-    const state = document.createElement('td'); state.textContent = job.state;
+    const isComplete = job.state === 'complete';
+    const name = document.createElement('td');
+    name.className = 'file-display';
+    name.textContent = job.name;
+    const state = document.createElement('td');
+    state.append(statusBadge(job.state));
     const prog = document.createElement('td');
-    const bar = document.createElement('progress');
-    bar.value = percent; bar.max = 100; bar.style.width = '100%';
-    prog.append(bar);
-    prog.append(` ${percent}%`);
+    prog.append(progressBar(percent, isComplete));
     if (job.bytes) {
-      const spd = document.createElement('div'); spd.className = 'muted'; spd.style.fontSize = '11px';
+      const spd = document.createElement('div');
+      spd.className = 'muted';
+      spd.style.fontSize = '10px';
+      spd.style.marginTop = '4px';
       spd.textContent = `${formatBytes(job.bytes)} downloaded`;
       prog.append(spd);
     }
-    const details = document.createElement('td'); details.className = 'muted'; details.style.fontSize = '11px';
+    const details = document.createElement('td');
+    details.className = 'muted';
+    details.style.fontSize = '10px';
     details.textContent = job.message || '';
     if (job.failed) details.textContent += ` · ${job.failed} skipped`;
     row.append(name, state, prog, details);
@@ -102,6 +137,7 @@ async function refresh() {
   const items = (await chrome.downloads.search({ orderBy: ['-startTime'], limit: 1000 }))
     .filter((item) => ids.has(item.id) && item.state === 'in_progress');
   status.textContent = `${items.length} active browser download${items.length === 1 ? '' : 's'}`;
+  status.className = 'msg info';
   render(items);
   await refreshJobs();
 }
