@@ -5,7 +5,15 @@
   window.__ddmLoaded = true;
 
   let host = null, btn = null, closeBtn = null, panel = null, toast = null;
-  let target = null, hideTimer = 0, toastTimer = 0, lastMove = 0, panelOpen = false, seq = 0;
+  let target = null, hideTimer = 0, toastTimer = 0, lastMove = 0, panelOpen = false, seq = 0, dismissed = false, enabled = true;
+
+  chrome.storage.local.get({ enabled: true }).then((settings) => { enabled = settings.enabled !== false; });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes.enabled) return;
+    enabled = changes.enabled.newValue !== false;
+    if (!enabled) { dismissed = true; panelOpen = false; if (panel) panel.hidden = true; hide(); }
+    else dismissed = false;
+  });
 
   const h = (tag, props, ...kids) => {
     const el = document.createElement(tag);
@@ -46,7 +54,15 @@
 
     btn.addEventListener('mouseenter', () => clearTimeout(hideTimer));
     btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); panelOpen ? closePanel() : openPanel(); });
-    closeBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); panelOpen = false; panel.hidden = true; hide(); });
+    closeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dismissed = true;
+      clearTimeout(hideTimer);
+      panelOpen = false;
+      panel.hidden = true;
+      hide();
+    });
     panel.addEventListener('mouseenter', () => clearTimeout(hideTimer));
   }
 
@@ -67,6 +83,7 @@
 
   /* ---------- button ---------- */
   function show(video, r, idleMs = 3500) {
+    if (!enabled || dismissed) return;
     attach();
     target = video;
     const left = Math.max(4, Math.min(r.right, innerWidth) - 112);
