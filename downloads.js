@@ -2,6 +2,7 @@
 const $ = (selector) => document.querySelector(selector);
 const tbody = $('#downloads');
 const status = $('#status');
+const hlsJobs = $('#hlsJobs');
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes < 1) return '0 B';
@@ -45,12 +46,26 @@ function render(items) {
     tbody.append(row);
   }
 }
+async function refreshJobs() {
+  const all = await chrome.storage.session.get(null);
+  const jobs = Object.values(all).filter((value) => value && value.id && value.state && value.name);
+  hlsJobs.textContent = '';
+  if (!jobs.length) { hlsJobs.textContent = 'No HLS processors running.'; return; }
+  for (const job of jobs) {
+    const item = document.createElement('div');
+    const percent = job.total ? Math.round(job.done / job.total * 100) : 0;
+    item.textContent = `${job.name} · ${job.state} · ${percent}% · ${job.message || ''}`;
+    hlsJobs.append(item);
+  }
+}
 async function refresh() {
   const items = await chrome.downloads.search({ orderBy: ['-startTime'], limit: 100 });
   status.textContent = `${items.length} download${items.length === 1 ? '' : 's'}`;
   render(items);
+  await refreshJobs();
 }
 $('#refresh').addEventListener('click', refresh);
 chrome.downloads.onCreated.addListener(refresh);
 chrome.downloads.onChanged.addListener(refresh);
+chrome.storage.onChanged.addListener(refreshJobs);
 refresh();

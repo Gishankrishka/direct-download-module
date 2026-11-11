@@ -4,8 +4,11 @@ const P = new URLSearchParams(location.search);
 const RULE_ID = 2000000000 + Math.floor(Math.random() * 100000000); // outside the range background.js purges
 let parsed = null, aborter = null, running = false;
 let converter = null, converterLoading = null;
+const jobId = crypto.randomUUID();
+const jobKey = 'hls-job:' + jobId;
 
 const log = (t, cls) => { const el = $('#log'); el.textContent = t; el.className = cls || ''; };
+const updateJob = (data) => chrome.storage.session.set({ [jobKey]: { id: jobId, name: $('#name').value || 'HLS video', time: Date.now(), ...data } }).catch(() => {});
 
 /* The fetches below come from this extension page, so give them the same Referer/Origin
    the real player would send. */
@@ -127,6 +130,7 @@ async function load() {
 async function start() {
   if (running) return;
   running = true; aborter = new AbortController();
+  updateJob({ state: 'downloading', done: 0, total: parsed?.media?.segments?.length || 0, message: 'Preparing stream' });
   $('#start').disabled = true; $('#cancel').hidden = false; $('#bar').hidden = false; $('#bar').value = 0;
   try {
     await setReferer();
@@ -144,6 +148,7 @@ async function start() {
     const res = await HLS.downloadSegments(media, {
       fetchBuf, signal: aborter.signal, skipFailed: $('#skip').checked, concurrency: 6,
       onProgress: (p) => {
+        updateJob({ state: 'downloading', done: p.done, total: p.total, bytes: p.bytes, failed: p.failed, message: 'Downloading segments' });
         $('#bar').value = (p.done / p.total) * 100;
         const rate = p.bytes / ((performance.now() - t0) / 1000);
         const eta = p.done ? ((performance.now() - t0) / 1000) * (p.total - p.done) / p.done : 0;
@@ -155,6 +160,7 @@ async function start() {
     let blob = new Blob(res.parts, { type: media.map ? 'video/mp4' : 'video/mp2t' });
     if (!media.map) {
       log('Downloaded all segments. Converting to MP4');
+      updateJob({ state: 'converting', done: res.parts.length, total: media.segments.length, message: 'Converting to MP4' });
       blob = await remuxTs(blob);
     }
     const burl = URL.createObjectURL(blob);
@@ -168,7 +174,9 @@ async function start() {
     let msg = `Done ✔  Saved ${base}.mp4 (${fmtMB(blob.size)}) to your Downloads folder.`;
     if (res.failed.length) msg += `\nSkipped segments: ${res.failed.join(', ')}`;
     log(msg, 'ok');
+    updateJob({ state: 'complete', done: media.segments.length, total: media.segments.length, message: 'Saved MP4' });
   } catch (e) {
+    updateJob({ state: e.message === 'Cancelled' ? 'cancelled' : 'failed', message: e.message || String(e) });
     log(e.message === 'Cancelled' ? 'Cancelled.' : 'Download failed: ' + (e.message || e), 'err');
   } finally {
     running = false; aborter = null; $('#start').disabled = false; $('#cancel').hidden = true;
@@ -178,6 +186,7 @@ async function start() {
 $('#load').addEventListener('click', load);
 $('#start').addEventListener('click', start);
 $('#cancel').addEventListener('click', () => aborter?.abort());
+$('#dashboard').addEventListener('click', () => chrome.runtime.sendMessage({ type: 'openDashboard' }));
 $('#url').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
 
 $('#url').value = P.get('u') || '';

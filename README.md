@@ -45,8 +45,9 @@ media. Use **Enable extension** in the popup to temporarily disable or re-enable
 the overlay and download actions.
 
 HLS downloads open in a separate closable popup window instead of a normal tab.
-Use **Downloads dashboard** when you want a full tab showing active and recent
-browser downloads.
+Use **Open dashboard** from the HLS window or **Downloads dashboard** from the
+toolbar popup to open a full tab showing browser downloads and live HLS
+processors.
 
 YouTube requires signed DASH URLs and frequently separates video and audio.
 YouTube often exposes separate signed video and audio streams. A normal browser
