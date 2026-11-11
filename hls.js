@@ -82,6 +82,7 @@ async function remuxTs(blob) {
     } catch { throw firstError; }
   }
   const output = await ffmpeg.readFile('output.mp4');
+  if (!output || output.byteLength === 0) throw new Error('FFmpeg produced empty output');
   await ffmpeg.deleteFile('input.ts').catch(() => {});
   await ffmpeg.deleteFile('output.mp4').catch(() => {});
   return new Blob([output], { type: 'video/mp4' });
@@ -132,7 +133,16 @@ async function loadAndStart() {
     log('Converting to MP4…');
     updateJob({ state: 'converting', done: res.parts.length, total: media.segments.length, message: 'Converting to MP4' });
     let blob = new Blob(res.parts, { type: media.map ? 'video/mp4' : 'video/mp2t' });
-    if (!media.map) blob = await remuxTs(blob);
+    log(`Initial blob: ${fmtMB(blob.size)}`);
+    if (!media.map) {
+      try {
+        blob = await remuxTs(blob);
+        log(`Remuxed blob: ${fmtMB(blob.size)}`);
+      } catch (e) {
+        log('Remux failed: ' + (e.message || e), 'err');
+        throw new Error('FFmpeg remux failed: ' + (e.message || e));
+      }
+    }
 
     if (blob.size === 0) throw new Error('Generated file is empty (0 bytes)');
 
@@ -141,6 +151,7 @@ async function loadAndStart() {
     try {
       downloadId = await chrome.downloads.download({ url: burl, filename: baseName + '.mp4', conflictAction: 'uniquify', saveAs: false });
       if (!downloadId) throw new Error('Download failed to start (no ID returned)');
+      log(`Download started: ID ${downloadId}`);
     } catch (e) {
       URL.revokeObjectURL(burl);
       throw new Error('Download failed: ' + (e.message || e));
