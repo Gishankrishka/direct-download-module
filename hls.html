@@ -1,14 +1,51 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>HLS download</title><link rel="stylesheet" href="ui.css"></head>
-<body><div class="page" style="max-width:420px;padding:12px">
-  <h1 style="font-size:13px;margin:0 0 8px">HLS Download</h1>
-  <div id="fileName" class="muted" style="font-size:12px;margin-bottom:8px;word-break:break-all"></div>
-  <progress id="bar" max="100" value="0" style="width:100%"></progress>
-  <div id="status" class="muted" style="font-size:11px;margin-top:6px"></div>
-  <div id="detail" class="muted" style="font-size:11px"></div>
-  <div style="margin-top:10px;display:flex;gap:6px;justify-content:flex-end">
-    <button id="dashboard" style="padding:4px 10px;font-size:12px">Open Dashboard</button>
-    <button id="cancel" style="padding:4px 10px;font-size:12px">Cancel</button>
+<html><head><meta charset="utf-8"><title>HLS download</title><link rel="stylesheet" href="ui.css">
+<style>
+  .page { max-width:420px; padding:14px 16px; }
+  h1 { font-size:13px; font-weight:600; margin:0 0 10px; color:#111827; letter-spacing:.2px; }
+  @media (prefers-color-scheme:dark) { h1 { color:#f3f4f6; } }
+
+  #fileName { font-size:12px; color:#6b7280; margin-bottom:12px; word-break:break-all; line-height:1.4; }
+  @media (prefers-color-scheme:dark) { #fileName { color:#9ca3af; } }
+
+  /* Custom progress bar */
+  .progress-wrap { position:relative; height:8px; border-radius:999px; background:#e5e7eb; overflow:hidden; margin-bottom:10px; }
+  @media (prefers-color-scheme:dark) { .progress-wrap { background:#374151; } }
+  .progress-bar { height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg,#2563eb,#3b82f6); transition:width .25s ease; position:relative; }
+  .progress-bar::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg,rgba(255,255,255,.15),transparent); border-radius:999px; }
+
+  #status { font-size:12px; color:#374151; margin-bottom:4px; min-height:18px; }
+  @media (prefers-color-scheme:dark) { #status { color:#e5e7eb; } }
+  #status.ok { color:#15803d; }
+  @media (prefers-color-scheme:dark) { #status.ok { color:#4ade80; } }
+  #status.err { color:#b91c1c; }
+  @media (prefers-color-scheme:dark) { #status.err { color:#f87171; } }
+
+  #detail { font-size:11px; color:#6b7280; margin-bottom:8px; font-variant-numeric:tabular-nums; }
+  @media (prefers-color-scheme:dark) { #detail { color:#9ca3af; } }
+
+  .btn-row { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
+  button { font:inherit; cursor:pointer; border:1px solid #d1d5db; background:#fff; color:#111827; border-radius:6px; padding:6px 12px; font-size:12px; font-weight:500; transition:all .12s ease; }
+  @media (prefers-color-scheme:dark) { button { border-color:#4b5563; background:#1f2937; color:#f3f4f6; } }
+  button:hover { border-color:#2563eb; background:#eff6ff; }
+  @media (prefers-color-scheme:dark) { button:hover { border-color:#3b82f6; background:#1e3a5f; } }
+  button:active { transform:scale(.98); }
+  button:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+  button#cancel { background:#fff; }
+  @media (prefers-color-scheme:dark) { button#cancel { background:#1f2937; } }
+  button#dashboard { background:#2563eb; color:#fff; border-color:#2563eb; }
+  button#dashboard:hover { background:#1d4ed8; border-color:#1d4ed8; }
+</style>
+</head>
+<body><div class="page">
+  <h1>HLS Download</h1>
+  <div id="fileName" class="muted"></div>
+  <div class="progress-wrap"><div id="bar" class="progress-bar" style="width:0%"></div></div>
+  <div id="status"></div>
+  <div id="detail"></div>
+  <div class="btn-row">
+    <button id="dashboard">Open Dashboard</button>
+    <button id="cancel">Cancel</button>
   </div>
 </div>
 <script src="ffmpeg.js"></script><script src="hls-core.js"></script><script src="hls.js"></script></body></html>

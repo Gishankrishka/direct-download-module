@@ -123,7 +123,7 @@ async function loadAndStart() {
       fetchBuf, signal: aborter.signal, skipFailed: false, concurrency: 6,
       onProgress: (p) => {
         const percent = Math.round(p.done / p.total * 100);
-        $('#bar').value = percent;
+        $('#bar').style.width = percent + '%';
         log(`Downloading ${p.done} / ${p.total} segments (${percent}%)`);
         setDetail(`${fmtMB(p.bytes)} · ${fmtMB(p.bytes / ((performance.now() - t0) / 1000))}/s · ~${fmtTime(p.done ? ((performance.now() - t0) / 1000) * (p.total - p.done) / p.done : 0)} left`);
         updateJob({ state: 'downloading', done: p.done, total: p.total, bytes: p.bytes, message: 'Downloading segments' });
