@@ -21,6 +21,39 @@ const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 function stripHash(u) { try { const x = new URL(u); x.hash = ''; return x.href; } catch { return u; } }
 
 /* ---------------------------------------------------------------------
+ * Offscreen document port for HLS processing
+ * ------------------------------------------------------------------- */
+let offscreenPort = null;
+let offscreenPortReady = null;
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'offscreen') {
+    offscreenPort = port;
+    if (offscreenPortReady) offscreenPortReady.resolve(port);
+    port.onDisconnect.addListener(() => {
+      if (offscreenPort === port) offscreenPort = null;
+    });
+  }
+});
+
+async function getOffscreenPort() {
+  if (offscreenPort) return offscreenPort;
+  // Create offscreen document if needed
+  const hasDoc = await chrome.offscreen.hasDocument();
+  if (!hasDoc) {
+    await chrome.offscreen.createDocument({
+      url: chrome.runtime.getURL('offscreen.html'),
+      reasons: ['WORKERS', 'IFRAME_SCRIPTING'],
+      justification: 'HLS stream download processing'
+    });
+  }
+  // Wait for offscreen document to connect
+  offscreenPortReady = {};
+  offscreenPortReady.promise = new Promise((resolve) => { offscreenPortReady.resolve = resolve; });
+  return offscreenPortReady.promise;
+}
+
+/* ---------------------------------------------------------------------
  * Referer support. chrome.downloads can't set a Referer header, but many
  * hosts require one, so we add a short-lived session rule for that URL.
  * Rule ids are epoch seconds, so stale ones can be recognised and purged.
@@ -384,38 +417,30 @@ async function handle(msg, sender) {
       return { ok: true };
 
     case 'startHlsDownload': {
-      // Create offscreen document if needed
-      const hasDoc = await chrome.offscreen.hasDocument();
-      if (!hasDoc) {
-        await chrome.offscreen.createDocument({
-          url: chrome.runtime.getURL('offscreen.html'),
-          reasons: ['WORKERS', 'IFRAME_SCRIPTING'],
-          justification: 'HLS stream download processing'
+      // Create offscreen document if needed and get port
+      const port = await getOffscreenPort();
+      if (!port) return { ok: false, error: 'Failed to connect to offscreen document' };
+      // Send message via port
+      return new Promise((resolve) => {
+        port.onMessage.addListener(function listener(response) {
+          port.onMessage.removeListener(listener);
+          resolve(response);
         });
-        // Wait for offscreen document to load and register listeners
-        await new Promise(r => setTimeout(r, 500));
-      }
-      // Send message to offscreen document with retry
-      for (let i = 0; i < 5; i++) {
-        try {
-          const response = await chrome.runtime.sendMessage(msg);
-          if (response) return response;
-        } catch { /* ignore */ }
-        await new Promise(r => setTimeout(r, 300));
-      }
-      return { ok: false, error: 'Offscreen document not ready' };
+        port.postMessage(msg);
+      });
     }
 
     case 'cancelHlsDownload': {
-      // Forward cancel to offscreen document with retry
-      for (let i = 0; i < 5; i++) {
-        try {
-          const response = await chrome.runtime.sendMessage(msg);
-          if (response) return response;
-        } catch { /* ignore */ }
-        await new Promise(r => setTimeout(r, 300));
-      }
-      return { ok: false, error: 'Offscreen document not ready' };
+      // Forward cancel via port
+      const port = await getOffscreenPort();
+      if (!port) return { ok: false, error: 'Failed to connect to offscreen document' };
+      return new Promise((resolve) => {
+        port.onMessage.addListener(function listener(response) {
+          port.onMessage.removeListener(listener);
+          resolve(response);
+        });
+        port.postMessage(msg);
+      });
     }
 
     case 'openDashboard':

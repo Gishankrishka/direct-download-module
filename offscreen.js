@@ -251,17 +251,19 @@ async function downloadSegments(media, opt) {
   return { parts, failed };
 }
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+// Connect to background script via port
+const bgPort = chrome.runtime.connect({ name: 'offscreen' });
+bgPort.onMessage.addListener((msg) => {
   if (msg.type === 'startHlsDownload') {
-    handleHlsDownload(msg).then(sendResponse, (e) => sendResponse({ ok: false, error: String(e?.message || e) }));
-    return true;
-  }
-  if (msg.type === 'cancelHlsDownload') {
+    handleHlsDownload(msg).then((response) => bgPort.postMessage(response));
+  } else if (msg.type === 'cancelHlsDownload') {
     if (aborter) aborter.abort();
-    sendResponse({ ok: true });
-    return true;
+    bgPort.postMessage({ ok: true });
   }
 });
+
+// Keep the offscreen document alive
+chrome.runtime.onConnect.addListener(() => {});
 
 async function handleHlsDownload(params) {
   if (running) return { ok: false, error: 'Already running' };
