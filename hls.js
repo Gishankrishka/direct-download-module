@@ -134,13 +134,27 @@ async function loadAndStart() {
     let blob = new Blob(res.parts, { type: media.map ? 'video/mp4' : 'video/mp2t' });
     if (!media.map) blob = await remuxTs(blob);
 
-    const burl = URL.createObjectURL(blob);
-    const id = await chrome.downloads.download({ url: burl, filename: baseName + '.mp4', conflictAction: 'uniquify', saveAs: false });
-    await chrome.storage.session.set({ ['ddm-download:' + id]: { id, url: baseName + '.mp4', time: Date.now() } });
+    if (blob.size === 0) throw new Error('Generated file is empty (0 bytes)');
 
+    const burl = URL.createObjectURL(blob);
+    let downloadId;
+    try {
+      downloadId = await chrome.downloads.download({ url: burl, filename: baseName + '.mp4', conflictAction: 'uniquify', saveAs: false });
+      if (!downloadId) throw new Error('Download failed to start (no ID returned)');
+    } catch (e) {
+      URL.revokeObjectURL(burl);
+      throw new Error('Download failed: ' + (e.message || e));
+    }
+
+    await chrome.storage.session.set({ ['ddm-download:' + downloadId]: { id: downloadId, url: baseName + '.mp4', time: Date.now() } });
+
+    // Keep blob URL alive until download completes; revoke on completion or after 5 min safety timeout
+    const revokeTimeout = setTimeout(() => URL.revokeObjectURL(burl), 5 * 60 * 1000);
     chrome.downloads.onChanged.addListener(function done(d) {
-      if (d.id === id && d.state && (d.state.current === 'complete' || d.state.current === 'interrupted')) {
-        chrome.downloads.onChanged.removeListener(done); URL.revokeObjectURL(burl);
+      if (d.id === downloadId && d.state && (d.state.current === 'complete' || d.state.current === 'interrupted')) {
+        chrome.downloads.onChanged.removeListener(done);
+        clearTimeout(revokeTimeout);
+        URL.revokeObjectURL(burl);
       }
     });
 
