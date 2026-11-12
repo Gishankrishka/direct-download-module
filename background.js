@@ -104,7 +104,7 @@ async function smartDownload(url, referrer, title) {
  * ------------------------------------------------------------------- */
 const expandCache = new Map();
 
-async function fetchPlaylistText(url, referrer) {
+async function fetchPlaylistText(url, referrer, ctx) {
   const id = 2100000000 + Math.floor(Math.random() * 40000000); // never purged by purgeOldRules
   const dnr = chrome.declarativeNetRequest;
   const mk = (h) => ({ id, priority: 1, action: { type: 'modifyHeaders', requestHeaders: h },
@@ -134,18 +134,30 @@ async function fetchPlaylistText(url, referrer) {
         lastError = new Error('That URL did not return an HLS playlist');
       } catch (e) { lastError = e; }
     }
+    // Fallback: fetch from inside the page/iframe that is playing the video, exactly like the player does
+    // (same Origin, cookies and tokens). Needed when the service-worker request is rejected by the CDN.
+    if (ctx && Number.isInteger(ctx.tabId)) {
+      const frames = [ctx.frameId, 0].filter((f, i, a) => Number.isInteger(f) && a.indexOf(f) === i);
+      for (const frameId of frames) {
+        try {
+          const r = await chrome.tabs.sendMessage(ctx.tabId, { type: 'fetchText', url }, { frameId });
+          if (r?.ok && /^\s*#EXTM3U/.test(r.text)) return { text: r.text, base: r.url || url };
+          if (r && !r.ok) lastError = new Error(r.error);
+        } catch (e) { lastError = lastError || e; }
+      }
+    }
     throw lastError || new Error('Playlist request failed');
   } finally {
     if (added) dnr.updateSessionRules({ removeRuleIds: [id] }).catch(() => {});
   }
 }
 
-async function expandHls(url, page) {
+async function expandHls(url, page, ctx) {
   const hit = expandCache.get(url);
   if (hit && Date.now() - hit.t < 5 * 60 * 1000) return hit.data;
   let data;
   try {
-    const { text, base } = await fetchPlaylistText(url, page);
+    const { text, base } = await fetchPlaylistText(url, page, ctx);
     if (!/^\s*#EXTM3U/.test(text)) throw new Error('not an HLS playlist');
     if (HLS.isMaster(text)) {
       const m = HLS.parseMaster(text, base);
@@ -167,7 +179,7 @@ async function expandHls(url, page) {
   } catch (e) {
     data = { url, master: false, error: String(e?.message || e), variants: [] };
   }
-  expandCache.set(url, { t: Date.now(), data });
+  if (!data.error) expandCache.set(url, { t: Date.now(), data }); // don't cache failures
   return data;
 }
 
@@ -180,7 +192,7 @@ async function getOptions(sender, msg) {
   const hlsEntries = list.filter((e) => e.kind === 'stream' && e.hls)
     .sort((a, b) => b.time - a.time)
     .slice(0, MAX_PER_TAB);
-  const expanded = await Promise.all(hlsEntries.map((e) => expandHls(e.url, page)));
+  const expanded = await Promise.all(hlsEntries.map((e) => expandHls(e.url, page, { tabId, frameId: sender.frameId })));
   const usable = expanded.filter((x) => !x.error);
   const candidates = usable.length ? usable : expanded;
   const inMaster = new Set(candidates.filter((x) => x.master).flatMap((x) => x.variants.map((v) => v.url)));

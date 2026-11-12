@@ -15,6 +15,15 @@
     else dismissed = false;
   });
 
+  // Lets the background worker read a playlist from this frame's own origin (same as the player).
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type !== 'fetchText' || !/^https?:/i.test(msg.url || '')) return;
+    fetch(msg.url, { credentials: 'include', cache: 'no-store' })
+      .then(async (r) => { if (!r.ok) throw new Error('HTTP ' + r.status); sendResponse({ ok: true, text: await r.text(), url: r.url }); })
+      .catch((e) => sendResponse({ ok: false, error: String(e?.message || e) }));
+    return true;
+  });
+
   const h = (tag, props, ...kids) => {
     const el = document.createElement(tag);
     Object.assign(el, props || {});
